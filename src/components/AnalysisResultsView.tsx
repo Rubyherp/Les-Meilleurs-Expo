@@ -1,10 +1,8 @@
-import { useState } from "react";
 import { ScrollView, View, Text, Pressable, Share } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import PageHeader from "./PageHeader";
 import PositiveNote from "./PositiveNote";
 import SuggestionCard from "./SuggestionCard";
-import ComparisonCard from "./ComparisonCard";
 import GroupSyncCard from "./GroupSyncCard";
 import TopDownVisualization from "./TopDownVisualization";
 import Phase5ComparisonView from "./Phase5ComparisonView";
@@ -26,8 +24,6 @@ export default function AnalysisResultsView({
   participants,
   onPracticeAgain,
 }: Props) {
-  const [selectedTimestamp, setSelectedTimestamp] = useState<number | null>(null);
-
   const share = async () => {
     await Share.share({
       message: `My ${session.title} practice notes from Les Meilleurs`,
@@ -94,16 +90,10 @@ export default function AnalysisResultsView({
             <SuggestionCard
               key={issue.id}
               issue={issue}
-              onReplay={() => setSelectedTimestamp(issue.timestamp)}
+              onReplay={() => undefined}
             />
           ))}
         </View>
-
-        <ComparisonCard
-          referenceSource={require("../../assets/videos/reference.mov")}
-          attemptSource={require("../../assets/videos/user-upload.mov")}
-          selectedTimestamp={selectedTimestamp}
-        />
 
         <View className="flex-row gap-3">
           <Pressable

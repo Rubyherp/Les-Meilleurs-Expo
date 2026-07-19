@@ -7,7 +7,7 @@
     "icon": "./assets/icon.png",
     "scheme": "lesmeilleurs",
     "userInterfaceStyle": "light",
-    "jsEngine": "jsc",
+    "jsEngine": "hermes",
     "plugins": [
       "expo-router",
       [

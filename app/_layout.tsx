@@ -13,6 +13,14 @@ export default function RootLayout() {
           options={{ presentation: "modal" }}
         />
         <Stack.Screen
+          name="create-mode-a"
+          options={{ presentation: "modal" }}
+        />
+        <Stack.Screen
+          name="create-mode-b"
+          options={{ presentation: "modal" }}
+        />
+        <Stack.Screen
           name="analysis/[id]"
           options={{ presentation: "modal" }}
         />

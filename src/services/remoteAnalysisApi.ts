@@ -20,6 +20,15 @@ export interface RemoteUploadResponse {
   status: string;
 }
 
+export interface RemoteComparisonResponse {
+  session_id: string;
+  task_id: string;
+  status: string;
+  mode: string;
+  reference_media_id: string;
+  attempt_media_id: string;
+}
+
 export interface RemoteTaskResponse {
   task_id: string;
   session_id: string;
@@ -149,6 +158,66 @@ export async function uploadAttemptVideo(
   return request<RemoteUploadResponse>(`/sessions/${encodeURIComponent(sessionID)}/upload`, {
     method: "POST",
     body: form,
+  });
+}
+
+// POST /sessions/{id}/reference — upload reference video
+export async function uploadReferenceVideo(
+  sessionID: string,
+  uri: string,
+  options?: { name?: string; type?: string }
+): Promise<RemoteUploadResponse> {
+  const name = options?.name ?? fileNameForUri(uri);
+  const form = new FormData();
+  form.append(
+    "video",
+    {
+      uri,
+      name,
+      type: options?.type ?? mimeTypeForName(name),
+    } as unknown as Blob
+  );
+  return request<RemoteUploadResponse>(`/sessions/${encodeURIComponent(sessionID)}/reference`, {
+    method: "POST",
+    body: form,
+  });
+}
+
+// POST /sessions/{id}/attempt — upload attempt video (Mode B variant)
+export async function uploadAttemptVideoB(
+  sessionID: string,
+  uri: string,
+  options?: { name?: string; type?: string }
+): Promise<RemoteUploadResponse> {
+  const name = options?.name ?? fileNameForUri(uri);
+  const form = new FormData();
+  form.append(
+    "video",
+    {
+      uri,
+      name,
+      type: options?.type ?? mimeTypeForName(name),
+    } as unknown as Blob
+  );
+  return request<RemoteUploadResponse>(`/sessions/${encodeURIComponent(sessionID)}/attempt`, {
+    method: "POST",
+    body: form,
+  });
+}
+
+// POST /sessions/{id}/compare — trigger DTW comparison
+export async function createComparison(
+  sessionID: string,
+  referenceMediaId: string,
+  attemptMediaId: string
+): Promise<RemoteComparisonResponse> {
+  return request<RemoteComparisonResponse>(`/sessions/${encodeURIComponent(sessionID)}/compare`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      reference_media_id: referenceMediaId,
+      attempt_media_id: attemptMediaId,
+    }),
   });
 }
 

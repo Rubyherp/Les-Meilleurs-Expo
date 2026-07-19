@@ -8,7 +8,7 @@ COPY pyproject.toml README.md ./
 COPY app ./app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libglib2.0-0 libgl1 \
+    && apt-get install -y --no-install-recommends build-essential python3-dev libglib2.0-0 libgl1 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir .

@@ -33,6 +33,12 @@ yarn-error.*
 # local env files
 .env*.local
 
+# Serena project files
+.serena/
+
+# Test videos
+assets/videos/*.mp4
+
 # typescript
 *.tsbuildinfo
 

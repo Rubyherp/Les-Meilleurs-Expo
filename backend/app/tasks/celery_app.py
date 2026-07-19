@@ -11,3 +11,4 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
 )
+celery_app.conf.update(include=["app.tasks.analysis"])

@@ -2,6 +2,10 @@ services:
   api:
     build: .
     env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://app:app@postgres:5432/video_analysis
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT_URL: http://minio:9000
     command: >-
       sh -c "python -m app.db.init &&
       uvicorn app.main:app --host 0.0.0.0 --port 8000"
@@ -20,6 +24,10 @@ services:
   worker:
     build: .
     env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://app:app@postgres:5432/video_analysis
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT_URL: http://minio:9000
     command: celery -A app.tasks.celery_app:celery_app worker --loglevel=info
     volumes:
       - ./models:/service/models:ro

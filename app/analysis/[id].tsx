@@ -5,6 +5,12 @@ import { useAppStore } from "@/store/useAppStore";
 import ProcessingView from "@/components/ProcessingView";
 import AnalysisResultsView from "@/components/AnalysisResultsView";
 
+const SEED_SESSION_ID = "11111111-1111-1111-1111-111111111111";
+const SEED_BACKEND_SESSION_ID = "ddd418e0-8893-4862-984a-5304b766805d";
+const SEED_COMPARISON_SESSION_ID = "22222222-2222-2222-2222-222222222222";
+// This will be replaced with the actual backend session ID after the comparison completes:
+const SEED_COMPARISON_BACKEND_ID = "bae46a8b-eda1-4fa1-8245-256acb7e6640";
+
 export default function AnalysisScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const sessions = useAppStore((state) => state.sessions);
@@ -14,6 +20,8 @@ export default function AnalysisScreen() {
     (state) => state.participantsBySession
   );
   const analyze = useAppStore((state) => state.analyze);
+  const seedFromBackend = useAppStore((state) => state.seedFromBackend);
+  const seedComparisonFromBackend = useAppStore((state) => state.seedComparisonFromBackend);
   const setShowingCreate = useAppStore((state) => state.setShowingCreate);
   const router = useRouter();
   const [phase, setPhase] = useState("preparing");
@@ -35,6 +43,24 @@ export default function AnalysisScreen() {
     )
       return;
     startedSessionId.current = session.id;
+
+    if (sessionId === SEED_SESSION_ID) {
+      setPhase("analyzing");
+      await seedFromBackend(SEED_SESSION_ID, SEED_BACKEND_SESSION_ID);
+      setPhase("completed");
+      return;
+    }
+
+    if (sessionId === SEED_COMPARISON_SESSION_ID) {
+      setPhase("analyzing");
+      await seedComparisonFromBackend(
+        SEED_COMPARISON_SESSION_ID,
+        SEED_COMPARISON_BACKEND_ID
+      );
+      setPhase("completed");
+      return;
+    }
+
     setPhase("preparing");
     try {
       await new Promise((resolve) => setTimeout(resolve, 450));
@@ -46,7 +72,7 @@ export default function AnalysisScreen() {
     } catch {
       setPhase("failed");
     }
-  }, [session, result, analyze]);
+  }, [session, result, analyze, seedFromBackend, seedComparisonFromBackend, sessionId]);
 
   useEffect(() => {
     runAnalysis();
@@ -78,7 +104,15 @@ export default function AnalysisScreen() {
         onPracticeAgain={() => {
           router.back();
           setTimeout(() => setShowingCreate(true), 100);
-          setTimeout(() => router.push("/create-session"), 200);
+          setTimeout(
+            () =>
+              router.push(
+                sessionId === SEED_COMPARISON_SESSION_ID
+                  ? "/create-mode-b"
+                  : "/create-session"
+              ),
+            200
+          );
         }}
       />
     );

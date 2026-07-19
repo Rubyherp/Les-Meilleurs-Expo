@@ -19,6 +19,10 @@ Two modes:
 - **Mode B (Reference vs attempt)** — compare your dance against a reference
   with DTW temporal alignment and per-dancer deviation scoring.
 
+The app ships with **seeded demo sessions** that show real analysis results
+without requiring a video upload: tap "Preview your first trend" for Mode A
+formation data, or "Compare two takes" for Mode B DTW comparison.
+
 ## Project structure
 
 ```
@@ -45,9 +49,18 @@ npx expo start
 
 Scan the QR code with Expo Go on your device.
 
+For local development, create a `.env` file in the project root:
+
+```
+EXPO_PUBLIC_API_URL=http://localhost:8000
+```
+
+Use your Mac's local IP (e.g. `http://192.168.1.36:8000`) instead of
+`localhost` when running on a physical iPhone.
+
 ## Quick start (backend)
 
-Requirements: Python 3.12, Docker.
+Requirements: Python 3.12, Docker, Apple Silicon Mac (ARM64).
 
 ```sh
 cd backend
@@ -57,25 +70,74 @@ docker compose up --build
 
 The API is available at `http://localhost:8000`. Interactive docs at `/docs`.
 
+Services: API (`:8000`), Celery worker, Postgres (`:5432`), Redis (`:6379`),
+MinIO/S3 (`:9000`, console `:9001`).
+
 ### Model assets
 
-Place these two files in `backend/models/` (automatically excluded from git):
+Place these two files in `backend/models/` (automatically mounted into the
+Docker container):
 
 | File | SHA-256 |
 |------|---------|
 | `yolo11n.pt` | `0ebbc80d4a7680d14987a577cd21342b65ecfd94632bd9a8da63ae6417644ee1` |
 | `pose_landmarker_lite.task` | `59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a` |
 
+### ARM64 compatibility
+
+The backend is tuned for Apple Silicon Docker. Key dependency pins:
+
+| Package | Version | Reason |
+|---------|---------|--------|
+| `mediapipe` | `0.10.18` | Latest with Linux ARM64 wheel |
+| `opencv-python` | `4.11.0.86` | Required by ultralytics (not headless) |
+| `lap` | `0.5.13` | Prebuilt ARM64 CPython 3.12 wheel |
+
 ## Connecting mobile to backend
 
-Set the environment variable in your Expo environment:
+Set `EXPO_PUBLIC_API_URL` in the `.env` file at the project root:
 
 ```sh
-EXPO_PUBLIC_API_URL=http://YOUR_COMPUTER_IP:8000
+# iOS simulator (shares host network):
+EXPO_PUBLIC_API_URL=http://localhost:8000
+
+# Physical iPhone (must be on same WiFi):
+EXPO_PUBLIC_API_URL=http://192.168.1.36:8000
 ```
 
-The phone and computer must be on the same network. When this variable is unset,
-the app uses local mock analysis.
+When unset, the app uses local mock analysis.
+
+## Seeding the demo data
+
+The app fetches real analysis results from the backend for two pre-processed
+demo sessions:
+
+| Demo | Mode | Backend session | Video |
+|------|------|-----------------|-------|
+| Preview your first trend | A — Formation | `ddd418e0-…` | `reference.mov` (18.6s, 1 dancer) |
+| Compare two takes | B — Comparison | `bae46a8b-…` | `reference.mov` vs `user-upload.mov` (0.97 score) |
+
+To re-run the analysis against new video files:
+
+```sh
+# Mode A — single video
+curl -s -X POST http://localhost:8000/api/v1/sessions | jq .session_id
+# → SESSION_ID
+curl -s -X POST "http://localhost:8000/api/v1/sessions/$SESSION_ID/upload" \
+  -F "video=@assets/videos/your-video.mp4;type=video/mp4"
+
+# Mode B — comparison (requires calibration)
+curl -s -X POST "http://localhost:8000/api/v1/sessions/$SESSION_ID/calibration" \
+  -H "Content-Type: application/json" \
+  -d '{"points":[[0.08,0.1],[0.92,0.1],[0.92,0.9],[0.08,0.9]]}'
+curl -s -X POST "http://localhost:8000/api/v1/sessions/$SESSION_ID/reference" \
+  -F "video=@reference.mov;type=video/quicktime"
+curl -s -X POST "http://localhost:8000/api/v1/sessions/$SESSION_ID/attempt" \
+  -F "video=@attempt.mov;type=video/quicktime"
+curl -s -X POST "http://localhost:8000/api/v1/sessions/$SESSION_ID/compare" \
+  -H "Content-Type: application/json" \
+  -d '{"reference_media_id":"<REF_ID>","attempt_media_id":"<ATT_ID>"}'
+```
 
 ## Backend commands
 
