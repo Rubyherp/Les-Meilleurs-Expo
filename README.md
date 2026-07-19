@@ -55,7 +55,7 @@ For local development, create a `.env` file in the project root:
 EXPO_PUBLIC_API_URL=http://localhost:8000
 ```
 
-Use your Mac's local IP (e.g. `http://192.168.1.36:8000`) instead of
+Use your Mac's local IP (e.g. `http://<YOUR_MAC_IP>:8000`) instead of
 `localhost` when running on a physical iPhone.
 
 ## Quick start (backend)
@@ -102,7 +102,7 @@ Set `EXPO_PUBLIC_API_URL` in the `.env` file at the project root:
 EXPO_PUBLIC_API_URL=http://localhost:8000
 
 # Physical iPhone (must be on same WiFi):
-EXPO_PUBLIC_API_URL=http://192.168.1.36:8000
+EXPO_PUBLIC_API_URL=http://<YOUR_MAC_IP>:8000
 ```
 
 When unset, the app uses local mock analysis.
