@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Les Meilleurs",
+    "slug": "les-meilleurs",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "lesmeilleurs",
+    "userInterfaceStyle": "light",
+    "jsEngine": "jsc",
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Les Meilleurs to access your camera",
+          "microphonePermission": "Allow Les Meilleurs to access your microphone",
+          "recordAudioAndroid": true
+        }
+      ]
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Record your dance practice takes.",
+        "NSMicrophoneUsageDescription": "Capture audio with your practice video.",
+        "NSPhotoLibraryUsageDescription": "Choose reference and attempt videos from your library."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    }
+  }
+}
