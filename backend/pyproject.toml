@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools==75.8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "video-analysis-backend"
+version = "0.1.0"
+description = "Phase 5 API and reference-vs-attempt video comparison pipeline"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi==0.115.6",
+    "uvicorn[standard]==0.34.0",
+    "pydantic-settings==2.7.1",
+    "sqlalchemy==2.0.37",
+    "greenlet==3.1.1",
+    "asyncpg==0.30.0",
+    "aiosqlite==0.20.0",
+    "python-multipart==0.0.20",
+    "celery==5.4.0",
+    "redis==5.2.1",
+    "boto3==1.36.18",
+    "numpy==1.26.4",
+    "scipy==1.16.1",
+    "opencv-python==4.11.0.86",
+    "mediapipe==0.10.30",
+    "ultralytics==8.3.75",
+    "lap==0.5.13",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest==8.3.4",
+    "pytest-asyncio==0.25.3",
+    "httpx==0.28.1",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

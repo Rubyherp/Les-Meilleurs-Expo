@@ -1,0 +1,17 @@
+.env
+.storage/
+uploads/
+*.mp4
+*.mov
+*.mkv
+*.webm
+models/
+*.pt
+*.task
+*.onnx
+*.engine
+__pycache__/
+.pytest_cache/
+.coverage
+*.py[cod]
+*.egg-info/

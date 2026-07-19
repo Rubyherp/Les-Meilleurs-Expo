@@ -1,9 +1,22 @@
+import { CalibrationCorners } from "./Calibration";
+
 export interface DanceSession {
   id: string;
   title: string;
   recordedAt: number; // unix ms
   duration: number;   // seconds
   participantIDs: string[];
+  attemptVideoUri?: string;
+  referenceVideoUri?: string;
+  calibrationCorners?: CalibrationCorners;
+  remoteSessionID?: string;
+  remoteTaskID?: string;
+}
+
+export interface DanceSessionMediaOptions {
+  attemptVideoUri?: string;
+  referenceVideoUri?: string;
+  calibrationCorners?: CalibrationCorners;
 }
 
 export function createDanceSession(

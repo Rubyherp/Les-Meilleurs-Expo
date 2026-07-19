@@ -21,6 +21,11 @@ import AttemptOption from "@/components/AttemptOption";
 import PrimaryButton from "@/components/PrimaryButton";
 import InlineStatus from "@/components/InlineStatus";
 import TipCard from "@/components/TipCard";
+import CalibrationOverlay from "@/components/CalibrationOverlay";
+import {
+  CalibrationCorners,
+  DEFAULT_CALIBRATION_CORNERS,
+} from "@/models/Calibration";
 
 type Step = "reference" | "attempt";
 
@@ -30,7 +35,14 @@ export default function CreateSessionScreen() {
   const [title, setTitle] = useState("");
   const [isGroup, setIsGroup] = useState(false);
   const [referenceReady, setReferenceReady] = useState(false);
+  const [referenceVideoUri, setReferenceVideoUri] = useState<string | undefined>();
   const [attemptReady, setAttemptReady] = useState(false);
+  const [attemptVideoUri, setAttemptVideoUri] = useState<string | undefined>();
+  const [attemptSource, setAttemptSource] = useState<"recorded" | "library" | undefined>();
+  const [calibrationCorners, setCalibrationCorners] = useState<CalibrationCorners>(
+    DEFAULT_CALIBRATION_CORNERS
+  );
+  const [previewRect, setPreviewRect] = useState({ width: 0, height: 0 });
   const [isLoadingRef] = useState(false);
   const [isLoadingAttempt] = useState(false);
   const [step, setStep] = useState<Step>("reference");
@@ -48,8 +60,16 @@ export default function CreateSessionScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Videos,
     });
     if (!result.canceled && result.assets.length > 0) {
-      if (isReference) setReferenceReady(true);
-      else setAttemptReady(true);
+      const uri = result.assets[0].uri;
+      if (isReference) {
+        setReferenceVideoUri(uri);
+        setReferenceReady(true);
+      } else {
+        setAttemptVideoUri(uri);
+        setAttemptSource("library");
+        setCalibrationCorners(DEFAULT_CALIBRATION_CORNERS);
+        setAttemptReady(true);
+      }
     }
   };
 
@@ -71,8 +91,12 @@ export default function CreateSessionScreen() {
     if (!cameraRef.current || isRecording) return;
     setIsRecording(true);
     try {
-      await cameraRef.current.recordAsync({ maxDuration: 60 });
+      const recording = await cameraRef.current.recordAsync({ maxDuration: 60 });
+      const uri = recording?.uri;
+      if (!uri) throw new Error("The camera did not return a video URI.");
       if (cameraSessionActive.current) {
+        setAttemptVideoUri(uri);
+        setAttemptSource("recorded");
         setAttemptReady(true);
         cameraSessionActive.current = false;
         setIsCameraVisible(false);
@@ -92,7 +116,11 @@ export default function CreateSessionScreen() {
   };
 
   const handleAnalyze = () => {
-    const session = store.createSession(title, isGroup);
+    const session = store.createSession(title, isGroup, {
+      attemptVideoUri,
+      referenceVideoUri,
+      calibrationCorners,
+    });
     router.back();
     setTimeout(() => {
       store.setPresentedSession(session);
@@ -100,7 +128,7 @@ export default function CreateSessionScreen() {
     }, 100);
   };
 
-  const canContinue = title.trim().length > 0 && referenceReady;
+  const canContinue = title.trim().length > 0;
 
   return (
     <ScrollView className="flex-1 bg-lesBackground">
@@ -162,6 +190,9 @@ export default function CreateSessionScreen() {
             >
               <PrimaryButton title="Add my attempt" enabled={canContinue} />
             </Pressable>
+            <Text className="text-xs text-lesMuted text-center">
+              Reference selection is optional for the single-take MVP.
+            </Text>
           </>
         ) : (
           <>
@@ -186,11 +217,27 @@ export default function CreateSessionScreen() {
             </View>
             {isCameraVisible && (
               <View className="gap-3 rounded-2xl overflow-hidden bg-lesInk p-3">
-                <CameraView
-                  ref={cameraRef}
-                  className="h-80 w-full rounded-xl"
-                  mode="video"
-                />
+                <View
+                  className="h-80 w-full rounded-xl overflow-hidden"
+                  onLayout={(event) => {
+                    const { width, height } = event.nativeEvent.layout;
+                    setPreviewRect({ width, height });
+                  }}
+                >
+                  <CameraView ref={cameraRef} className="flex-1" mode="video" />
+                  {previewRect.width > 0 && previewRect.height > 0 && (
+                    <View className="absolute inset-0">
+                      <CalibrationOverlay
+                        previewRect={previewRect}
+                        initialCorners={calibrationCorners}
+                        onCornersChange={setCalibrationCorners}
+                      />
+                    </View>
+                  )}
+                </View>
+                <Text className="text-xs text-lesMuted">
+                  Set the four visible stage corners before recording. These corners are sent with your take.
+                </Text>
                 <View className="flex-row gap-3">
                   <Pressable
                     className="flex-1 rounded-xl bg-lesCoral p-4 items-center"
@@ -213,6 +260,12 @@ export default function CreateSessionScreen() {
             )}
             {isLoadingAttempt && (
               <InlineStatus text="Preparing your take…" icon="sync" />
+            )}
+            {attemptSource === "library" && (
+              <InlineStatus
+                text="Library video: using the default stage corners because there is no preview to calibrate."
+                icon="information-circle"
+              />
             )}
             {attemptReady ? (
               <InlineStatus

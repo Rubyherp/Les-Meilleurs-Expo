@@ -6,6 +6,8 @@ import PositiveNote from "./PositiveNote";
 import SuggestionCard from "./SuggestionCard";
 import ComparisonCard from "./ComparisonCard";
 import GroupSyncCard from "./GroupSyncCard";
+import TopDownVisualization from "./TopDownVisualization";
+import Phase5ComparisonView from "./Phase5ComparisonView";
 import { DanceSession } from "../models/DanceSession";
 import { AnalysisResult } from "../models/AnalysisResult";
 import { GroupParticipant } from "../models/GroupParticipant";
@@ -52,16 +54,33 @@ export default function AnalysisResultsView({
               </Text>
             </View>
             <Text className="text-[34px] font-bold text-lesCoral">
-              {formatScore(result.overallScore)}
+              {result.phase4 && !result.comparison ? "—" : formatScore(result.overallScore)}
             </Text>
           </View>
           <Text className="text-base text-lesMuted">
-            Your timing is close. Use this as a practice signal, not a judgment
-            of your style.
+            {result.phase4 && !result.comparison
+              ? "Frame-level movement data is ready. Quality scoring will arrive in a later phase."
+              : "Your timing is close. Use this as a practice signal, not a judgment of your style."}
           </Text>
         </View>
 
         {participants.length > 0 && <GroupSyncCard count={participants.length} />}
+
+        {result.comparison && (
+          <Phase5ComparisonView
+            result={result.comparison}
+            participants={participants}
+            durationSeconds={session.duration}
+          />
+        )}
+
+        {result.phase4 && (
+          <TopDownVisualization
+            result={result.phase4}
+            participants={participants}
+            durationSeconds={session.duration}
+          />
+        )}
 
         <View className="gap-3">
           <Text className="text-lg font-bold text-lesInk">What's working</Text>

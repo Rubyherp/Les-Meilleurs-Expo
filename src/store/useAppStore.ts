@@ -2,6 +2,7 @@ import { create } from "zustand";
 import {
   DanceSession,
   createDanceSession,
+  DanceSessionMediaOptions,
 } from "../models/DanceSession";
 import {
   GroupParticipant,
@@ -23,7 +24,12 @@ interface AppState {
 
   setShowingCreate: (show: boolean) => void;
   setPresentedSession: (session: DanceSession | null) => void;
-  createSession: (title: string, isGroup: boolean) => DanceSession;
+  createSession: (
+    title: string,
+    isGroup: boolean,
+    mediaOptions?: DanceSessionMediaOptions
+  ) => DanceSession;
+  updateSession: (sessionID: string, patch: Partial<DanceSession>) => void;
   analyze: (session: DanceSession) => Promise<void>;
 }
 
@@ -47,14 +53,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   setShowingCreate: (show) => set({ isShowingCreate: show }),
   setPresentedSession: (session) => set({ presentedSession: session }),
 
-  createSession: (title, isGroup) => {
+  createSession: (title, isGroup, mediaOptions) => {
     const participants = isGroup ? createGroupParticipants() : [];
-    const session = createDanceSession(
+    const session = {
+      ...createDanceSession(
       title,
       isGroup,
       24,
       participants.map((participant) => participant.id)
-    );
+      ),
+      ...mediaOptions,
+    };
     set((state) => ({
       sessions: [session, ...state.sessions],
       participantsBySession: {
@@ -65,10 +74,26 @@ export const useAppStore = create<AppState>((set, get) => ({
     return session;
   },
 
+  updateSession: (sessionID, patch) =>
+    set((state) => ({
+      sessions: state.sessions.map((session) =>
+        session.id === sessionID ? { ...session, ...patch } : session
+      ),
+    })),
+
   analyze: async (session) => {
-    set({ analyzingSessionId: session.id });
+    set((state) => {
+      const errorBySession = { ...state.errorBySession };
+      delete errorBySession[session.id];
+      return { analyzingSessionId: session.id, errorBySession };
+    });
     try {
-      const result = await analyzeSession(session);
+      const result = await analyzeSession(session, {
+        onRemoteSession: (remoteSessionID) =>
+          get().updateSession(session.id, { remoteSessionID }),
+        onRemoteTask: (remoteTaskID) =>
+          get().updateSession(session.id, { remoteTaskID }),
+      });
       set((state) => ({
         resultsBySession: {
           ...state.resultsBySession,
@@ -81,7 +106,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         errorBySession: {
           ...state.errorBySession,
           [session.id]:
-            "We could not finish this analysis. Your session is still saved as a draft.",
+            err instanceof Error
+              ? err.message
+              : "We could not finish this analysis. Your session is still saved as a draft.",
         },
         analyzingSessionId: null,
       }));
