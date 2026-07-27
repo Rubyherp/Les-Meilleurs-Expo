@@ -21,6 +21,7 @@
     ],
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.lesmeilleurs.app",
       "infoPlist": {
         "NSCameraUsageDescription": "Record your dance practice takes.",
         "NSMicrophoneUsageDescription": "Capture audio with your practice video.",
@@ -28,6 +29,7 @@
       }
     },
     "android": {
+      "package": "com.lesmeilleurs.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
