@@ -1,6 +1,7 @@
 import { View, Text, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import ProgressRow from "./ProgressRow";
+import { getProgressRowStates } from "@/utils/progressStates";
 
 interface Props {
   session: { title: string; id: string };
@@ -18,6 +19,7 @@ export default function ProcessingView({
   onClose,
 }: Props) {
   const isFailed = phase === "failed";
+  const rowStates = getProgressRowStates(phase);
   const phaseOrder = ["preparing", "uploading", "analyzing"];
   const currentIndex = phaseOrder.indexOf(phase);
   const trimProgress =
@@ -59,18 +61,18 @@ export default function ProcessingView({
       <View className="p-5 bg-white/70 border border-lesLine rounded-[22px] w-full max-w-[360px] gap-3.5">
         <ProgressRow
           title="Preparing videos"
-          isComplete={currentIndex > 0 && !isFailed}
-          isCurrent={currentIndex === 0}
+          isComplete={rowStates[0].isComplete}
+          isCurrent={rowStates[0].isCurrent}
         />
         <ProgressRow
           title="Comparing movement"
-          isComplete={phase === "completed"}
-          isCurrent={currentIndex === 2}
+          isComplete={rowStates[1].isComplete}
+          isCurrent={rowStates[1].isCurrent}
         />
         <ProgressRow
           title="Writing suggestions"
-          isComplete={phase === "completed"}
-          isCurrent={false}
+          isComplete={rowStates[2].isComplete}
+          isCurrent={rowStates[2].isCurrent}
         />
       </View>
 

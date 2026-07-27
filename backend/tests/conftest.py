@@ -3,6 +3,8 @@ from collections.abc import AsyncIterator
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.api.dependencies import get_storage_service, get_task_dispatcher
@@ -10,6 +12,11 @@ from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.services.storage import StoredObject
+
+
+@compiles(JSONB, "sqlite")
+def _compile_jsonb_sqlite(type_, compiler, **kw):
+    return compiler.visit_JSON(type_, **kw)
 
 
 class FakeStorage:
@@ -20,6 +27,12 @@ class FakeStorage:
 class FakeDispatcher:
     def enqueue(self, job_id) -> str:
         return f"celery-{job_id}"
+
+
+class FailingDispatcher:
+    def enqueue(self, job_id):
+        msg = "Task queue unavailable"
+        raise RuntimeError(msg)
 
 
 @pytest.fixture

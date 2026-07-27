@@ -21,6 +21,7 @@ export interface Phase5Alignment {
 export interface Phase5Match {
   referenceTrackId: Phase4TrackId;
   attemptTrackId: Phase4TrackId;
+  alignmentPath?: Phase5AlignmentFramePair[];
 }
 
 export interface Phase5AlignedPoint {
@@ -64,6 +65,7 @@ export interface Phase5AlignmentFramePairJson {
 export interface Phase5MatchJson {
   reference_track_id: Phase4TrackId;
   attempt_track_id: Phase4TrackId;
+  alignment_path?: [number, number][];
 }
 
 export interface Phase5AlignedPointJson {
@@ -120,8 +122,60 @@ function normalizeFramePair(pair: Phase5AlignmentFramePairJson): Phase5Alignment
   return { referenceFrameIndex, attemptFrameIndex };
 }
 
+function normalizeAlignmentPath(path: unknown): Phase5AlignmentFramePair[] {
+  if (!Array.isArray(path)) return [];
+  return path
+    .map((pair) => {
+      if (!Array.isArray(pair) || pair.length < 2) return null;
+      const referenceFrameIndex = finite(pair[0], NaN);
+      const attemptFrameIndex = finite(pair[1], NaN);
+      return Number.isFinite(referenceFrameIndex) && Number.isFinite(attemptFrameIndex)
+        ? { referenceFrameIndex, attemptFrameIndex }
+        : null;
+    })
+    .filter((pair): pair is Phase5AlignmentFramePair => pair !== null);
+}
+
 function normalizePhase4Side(input: Phase4ResultJson): Phase4Result | null {
   return normalizePhase4Result(input);
+}
+
+/**
+ * Build a top-level alignment from per-deviation per_frame data.
+ * Each unique reference frame is paired with its first encountered
+ * attempt frame, preserving the backend DTW path.
+ */
+function deriveAlignmentFromDeviations(
+  deviations: Phase5Deviation[]
+): Phase5Alignment | undefined {
+  const seen = new Set<number>();
+  const framePairs: Phase5AlignmentFramePair[] = [];
+  let totalCost = 0;
+  let pairCount = 0;
+  for (const dev of deviations) {
+    for (const point of dev.perFrame) {
+      if (!seen.has(point.referenceFrameIndex)) {
+        seen.add(point.referenceFrameIndex);
+        framePairs.push({
+          referenceFrameIndex: point.referenceFrameIndex,
+          attemptFrameIndex: point.attemptFrameIndex,
+        });
+        totalCost += point.distance;
+        pairCount++;
+      }
+    }
+  }
+  if (framePairs.length === 0) return undefined;
+  return {
+    cost: pairCount > 0 ? totalCost / pairCount : 0,
+    framePairs,
+  };
+}
+
+function deriveAlignmentFromMatches(matches: Phase5Match[]): Phase5Alignment | undefined {
+  const framePairs = matches.find((match) => match.alignmentPath?.length)?.alignmentPath;
+  if (!framePairs?.length) return undefined;
+  return { cost: 0, framePairs };
 }
 
 /** Convert the snake_case comparison payload into a stable view model. */
@@ -131,24 +185,19 @@ export function normalizePhase5Result(input: Phase5ResultJson): Phase5Result | n
   const attempt = normalizePhase4Side(input.attempt);
   if (!reference || !attempt) return null;
 
-  const alignment = input.alignment
-    ? {
-        cost: Math.max(0, finite(input.alignment.cost)),
-        framePairs: (input.alignment.frame_pairs ?? [])
-          .map(normalizeFramePair)
-          .filter((pair): pair is Phase5AlignmentFramePair => pair !== null),
-      }
-    : undefined;
-
   const matches = (Array.isArray(input.matches) ? input.matches : [])
     .map((match) => {
       const referenceTrackId = trackId(match.reference_track_id);
       const attemptTrackId = trackId(match.attempt_track_id);
       return referenceTrackId === null || attemptTrackId === null
         ? null
-        : { referenceTrackId, attemptTrackId };
+        : {
+            referenceTrackId,
+            attemptTrackId,
+            alignmentPath: normalizeAlignmentPath(match.alignment_path),
+          };
     })
-    .filter((match): match is Phase5Match => match !== null);
+    .filter((match): match is NonNullable<typeof match> => match !== null);
 
   const deviations = (Array.isArray(input.deviations) ? input.deviations : [])
     .map((deviation) => {
@@ -171,6 +220,20 @@ export function normalizePhase5Result(input: Phase5ResultJson): Phase5Result | n
       };
     })
     .filter((deviation): deviation is Phase5Deviation => deviation !== null);
+
+  // Top-level alignment from backend payload; else derive from
+  // per-deviation per_frame data (the per-match DTW path).
+  const alignment = input.alignment &&
+    (input.alignment.frame_pairs ?? []).length > 0
+    ? {
+        cost: Math.max(0, finite(input.alignment.cost)),
+        framePairs: (input.alignment.frame_pairs ?? [])
+          .map(normalizeFramePair)
+          .filter((pair): pair is Phase5AlignmentFramePair => pair !== null),
+      }
+    : deviations.length > 0
+      ? deriveAlignmentFromDeviations(deviations)
+      : undefined;
 
   return {
     phase: 5,
