@@ -4,14 +4,18 @@ import {
   DEFAULT_CALIBRATION_CORNERS,
 } from "../models/Calibration";
 import { normalizePhase4Result } from "../models/Phase4Result";
+import { normalizePhase5Result, Phase5ResultJson } from "../models/Phase5Result";
 import { mockAnalyze } from "./mockAnalysis";
 import {
   createRemoteSession,
+  createComparison,
   getRemoteApiBaseUrl,
   getRemoteResults,
   pollRemoteTask,
   submitCalibration,
   uploadAttemptVideo,
+  uploadAttemptVideoB,
+  uploadReferenceVideo,
 } from "./remoteAnalysisApi";
 
 export interface PreparedDanceInput {
@@ -52,6 +56,54 @@ export async function analyzeSession(
   }
 ): Promise<AnalysisResult> {
   const apiBaseUrl = getRemoteApiBaseUrl();
+
+  // ═══ Mode B: reference + attempt comparison ═════════════════════════════
+  if (apiBaseUrl && session.referenceVideoUri && session.attemptVideoUri) {
+    const remoteSession = await createRemoteSession();
+    options?.onRemoteSession?.(remoteSession.session_id);
+
+    await submitCalibration(
+      remoteSession.session_id,
+      session.calibrationCorners ?? DEFAULT_CALIBRATION_CORNERS
+    );
+
+    const refUpload = await uploadReferenceVideo(remoteSession.session_id, session.referenceVideoUri);
+    const attUpload = await uploadAttemptVideoB(remoteSession.session_id, session.attemptVideoUri);
+
+    const comparison = await createComparison(
+      remoteSession.session_id,
+      refUpload.media_id,
+      attUpload.media_id
+    );
+    options?.onRemoteTask?.(comparison.task_id);
+
+    const task = await pollRemoteTask(comparison.task_id, {
+      onStatus: (status) => options?.onRemoteStatus?.(status.status),
+    });
+
+    const remoteResults = await getRemoteResults<Phase5ResultJson>(remoteSession.session_id);
+    const phase5 = normalizePhase5Result(remoteResults.metadata);
+    if (!phase5) {
+      throw new Error("The server returned no usable comparison result.");
+    }
+
+    return {
+      id: `${session.id}-${task.task_id}`,
+      sessionID: session.id,
+      analyzedAt: Date.now(),
+      overallScore: phase5.overallScore,
+      issues: [],
+      participantResults: session.participantIDs.map((participantID) => ({
+        participantID,
+        score: 0,
+        issues: [],
+      })),
+      comparison: phase5,
+      phase4: phase5.attempt,
+    };
+  }
+
+  // ═══ Mode A: single-video Phase 4 ═══════════════════════════════════════
   if (apiBaseUrl && session.attemptVideoUri) {
     const remoteSession = await createRemoteSession();
     options?.onRemoteSession?.(remoteSession.session_id);

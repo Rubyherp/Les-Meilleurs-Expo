@@ -1,7 +1,9 @@
 import { Pressable, ScrollView, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import PageHeader from "@/components/PageHeader";
+import { logger } from "@/utils/logger";
 
 interface ModeCardProps {
   number: string;
@@ -54,58 +56,69 @@ export default function CreateSessionScreen() {
   const router = useRouter();
 
   return (
-    <ScrollView className="flex-1 bg-lesBackground" contentContainerClassName="pb-8">
-      <View className="gap-7 p-5">
-        <View className="flex-row items-center justify-between">
-          <View className="flex-row items-center gap-2">
-            <View className="h-2.5 w-2.5 rounded-full bg-lesCoral" />
-            <Text className="text-xs font-bold uppercase tracking-[1.8px] text-lesMuted">
-              New session
+    <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-lesBackground">
+      <ScrollView className="flex-1 bg-lesBackground" contentContainerClassName="pb-8">
+        <View className="gap-7 p-5">
+          <View className="flex-row items-center justify-between">
+            <View className="flex-row items-center gap-2">
+              <View className="h-2.5 w-2.5 rounded-full bg-lesCoral" />
+              <Text className="text-xs font-bold uppercase tracking-[1.8px] text-lesMuted">
+                New session
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close new session"
+              onPress={() => {
+                logger.ui.press("Close new session");
+                router.back();
+              }}
+              className="flex-row items-center gap-1 rounded-full px-1 py-2"
+            >
+              <Text className="font-semibold text-lesCoral">Close</Text>
+              <Ionicons name="close" size={18} color="#FF5C5C" />
+            </Pressable>
+          </View>
+
+          <PageHeader
+            eyebrow="CHOOSE YOUR WORKFLOW"
+            title="What are we looking at?"
+            subtitle="Pick the way you want to practice. You can switch workflows any time you start a new session."
+          />
+
+          <View className="gap-4">
+            <ModeCard
+              number="MODE A"
+              title="Build the formation"
+              detail="Use one video to map a top-down formation and see how your group moves through the space."
+              icon="navigate"
+              tint="#C8F36A"
+              onPress={() => {
+                logger.ui.press("Mode A: Build the formation");
+                router.push("/create-mode-a");
+              }}
+            />
+            <ModeCard
+              number="MODE B"
+              title="Compare two takes"
+              detail="Bring a reference and your attempt together, then review where the performance drifts."
+              icon="git-compare"
+              tint="#FF5C5C"
+              onPress={() => {
+                logger.ui.press("Mode B: Compare two takes");
+                router.push("/create-mode-b");
+              }}
+            />
+          </View>
+
+          <View className="flex-row items-start gap-3 rounded-2xl bg-lesInk p-4">
+            <Ionicons name="sparkles" size={18} color="#C8F36A" />
+            <Text className="flex-1 text-xs leading-5 text-lesBackground/75">
+              Not sure yet? Mode A is the quickest way to understand spacing. Mode B is best when you have a clip to match.
             </Text>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Close new session"
-            onPress={() => router.back()}
-            className="flex-row items-center gap-1 rounded-full px-1 py-2"
-          >
-            <Text className="font-semibold text-lesCoral">Close</Text>
-            <Ionicons name="close" size={18} color="#FF5C5C" />
-          </Pressable>
         </View>
-
-        <PageHeader
-          eyebrow="CHOOSE YOUR WORKFLOW"
-          title="What are we looking at?"
-          subtitle="Pick the way you want to practice. You can switch workflows any time you start a new session."
-        />
-
-        <View className="gap-4">
-          <ModeCard
-            number="MODE A"
-            title="Build the formation"
-            detail="Use one video to map a top-down formation and see how your group moves through the space."
-            icon="navigate"
-            tint="#C8F36A"
-            onPress={() => router.push("/create-mode-a")}
-          />
-          <ModeCard
-            number="MODE B"
-            title="Compare two takes"
-            detail="Bring a reference and your attempt together, then review where the performance drifts."
-            icon="git-compare"
-            tint="#FF5C5C"
-            onPress={() => router.push("/create-mode-b")}
-          />
-        </View>
-
-        <View className="flex-row items-start gap-3 rounded-2xl bg-lesInk p-4">
-          <Ionicons name="sparkles" size={18} color="#C8F36A" />
-          <Text className="flex-1 text-xs leading-5 text-lesBackground/75">
-            Not sure yet? Mode A is the quickest way to understand spacing. Mode B is best when you have a clip to match.
-          </Text>
-        </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }

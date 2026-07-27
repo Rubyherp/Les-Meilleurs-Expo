@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { logger } from "@/utils/logger";
 import { useAppStore } from "@/store/useAppStore";
 import ProcessingView from "@/components/ProcessingView";
 import AnalysisResultsView from "@/components/AnalysisResultsView";
@@ -26,7 +27,13 @@ export default function AnalysisScreen() {
   const router = useRouter();
   const [phase, setPhase] = useState("preparing");
   const startedSessionId = useRef<string | null>(null);
+  const mountedRef = useRef(true);
   const sessionId = Array.isArray(id) ? id[0] : id;
+
+  // Safe setPhase that respects unmount
+  const safeSetPhase = useCallback((p: string) => {
+    if (mountedRef.current) setPhase(p);
+  }, []);
 
   const session = sessions.find((s) => s.id === sessionId);
   const result = sessionId ? resultsBySession[sessionId] : undefined;
@@ -45,42 +52,69 @@ export default function AnalysisScreen() {
     startedSessionId.current = session.id;
 
     if (sessionId === SEED_SESSION_ID) {
-      setPhase("analyzing");
-      await seedFromBackend(SEED_SESSION_ID, SEED_BACKEND_SESSION_ID);
-      setPhase("completed");
+      logger.phase("preparing → analyzing (seed)");
+      safeSetPhase("analyzing");
+      try {
+        await seedFromBackend(SEED_SESSION_ID, SEED_BACKEND_SESSION_ID);
+        logger.phase("analyzing → completed (seed)");
+        safeSetPhase("completed");
+      } catch {
+        logger.phase("analyzing → failed (seed)");
+        safeSetPhase("failed");
+      }
       return;
     }
 
     if (sessionId === SEED_COMPARISON_SESSION_ID) {
-      setPhase("analyzing");
-      await seedComparisonFromBackend(
-        SEED_COMPARISON_SESSION_ID,
-        SEED_COMPARISON_BACKEND_ID
-      );
-      setPhase("completed");
+      logger.phase("preparing → analyzing (seed comparison)");
+      safeSetPhase("analyzing");
+      try {
+        await seedComparisonFromBackend(
+          SEED_COMPARISON_SESSION_ID,
+          SEED_COMPARISON_BACKEND_ID
+        );
+        logger.phase("analyzing → completed (seed comparison)");
+        safeSetPhase("completed");
+      } catch {
+        logger.phase("analyzing → failed (seed comparison)");
+        safeSetPhase("failed");
+      }
       return;
     }
 
-    setPhase("preparing");
+    if (!mountedRef.current) return;
+    logger.phase("initial → preparing");
+    safeSetPhase("preparing");
     try {
       await new Promise((resolve) => setTimeout(resolve, 450));
-      setPhase("uploading");
+      if (!mountedRef.current) return;
+      logger.phase("preparing → uploading");
+      safeSetPhase("uploading");
       await new Promise((resolve) => setTimeout(resolve, 350));
-      setPhase("analyzing");
+      if (!mountedRef.current) return;
+      logger.phase("uploading → analyzing");
+      safeSetPhase("analyzing");
       await analyze(session);
-      setPhase("completed");
+      if (!mountedRef.current) return;
+      logger.phase("analyzing → completed");
+      safeSetPhase("completed");
     } catch {
-      setPhase("failed");
+      logger.phase("→ failed");
+      safeSetPhase("failed");
     }
-  }, [session, result, analyze, seedFromBackend, seedComparisonFromBackend, sessionId]);
+  }, [session, result, analyze, seedFromBackend, seedComparisonFromBackend, sessionId, safeSetPhase]);
 
   useEffect(() => {
+    mountedRef.current = true;
     runAnalysis();
+    return () => {
+      mountedRef.current = false;
+    };
   }, [runAnalysis]);
 
   if (!session) {
     return (
-      <View className="flex-1 bg-lesBackground items-center justify-center">
+      <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-lesBackground">
         <ProcessingView
           session={{
             title: "",
@@ -91,40 +125,51 @@ export default function AnalysisScreen() {
           onRetry={() => router.back()}
           onClose={() => router.back()}
         />
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (result) {
     return (
-      <AnalysisResultsView
-        session={session}
-        result={result}
-        participants={participants}
-        onPracticeAgain={() => {
-          router.back();
-          setTimeout(() => setShowingCreate(true), 100);
-          setTimeout(
-            () =>
-              router.push(
-                sessionId === SEED_COMPARISON_SESSION_ID
-                  ? "/create-mode-b"
-                  : "/create-session"
-              ),
-            200
-          );
-        }}
-      />
+      <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-lesBackground">
+        <AnalysisResultsView
+          session={session}
+          result={result}
+          participants={participants}
+          onPracticeAgain={() => {
+            logger.ui.press("Practice again");
+            router.back();
+            setTimeout(() => setShowingCreate(true), 100);
+            setTimeout(
+              () =>
+                router.push(
+                  sessionId === SEED_COMPARISON_SESSION_ID
+                    ? "/create-mode-b"
+                    : "/create-session"
+                ),
+              200
+            );
+          }}
+        />
+      </SafeAreaView>
     );
   }
 
   return (
-    <ProcessingView
-      session={session}
-      phase={phase === "failed" || error ? "failed" : phase}
-      errorMessage={error}
-      onRetry={() => runAnalysis(true)}
-      onClose={() => router.back()}
-    />
+    <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-lesBackground">
+      <ProcessingView
+        session={session}
+        phase={phase === "failed" || error ? "failed" : phase}
+        errorMessage={error}
+        onRetry={() => {
+          logger.ui.press("Retry analysis");
+          runAnalysis(true);
+        }}
+        onClose={() => {
+          logger.ui.press("Close analysis");
+          router.back();
+        }}
+      />
+    </SafeAreaView>
   );
 }

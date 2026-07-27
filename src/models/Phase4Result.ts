@@ -162,9 +162,13 @@ export function normalizePhase4Result(input: Phase4ResultJson): Phase4Result | n
   const width = Math.max(0.01, rawWidth);
   const height = Math.max(0.01, rawHeight);
   const frames = input.frames ?? input.sampled_frames ?? [];
+  const MIN_AR = 0.5;
+  const MAX_AR = 2.0;
   const aspectRatio = isFiniteNumber(input.grid?.aspect_ratio)
-    ? Math.max(0.5, input.grid!.aspect_ratio!)
-    : input.grid ? width / height : 1;
+    ? Math.max(MIN_AR, Math.min(MAX_AR, input.grid!.aspect_ratio!))
+    : input.grid
+      ? Math.max(MIN_AR, Math.min(MAX_AR, width / height))
+      : 1;
   const calibration = input.grid?.calibration;
   const projection = input.projection;
 

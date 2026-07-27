@@ -1,11 +1,28 @@
 import "../global.css";
-import { Stack } from "expo-router";
+import { useRef } from "react";
+import { Stack, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { logger } from "@/utils/logger";
+
+function NavigationLogger() {
+  const segments = useSegments();
+  const previous = useRef<string>("app");
+
+  const current = segments.join("/") || "app";
+  if (current !== previous.current) {
+    logger.ui.navigate(previous.current, current);
+    previous.current = current;
+  }
+  return null;
+}
 
 export default function RootLayout() {
+  logger.system("App mounted");
   return (
-    <>
+    <SafeAreaProvider>
       <StatusBar style="dark" />
+      <NavigationLogger />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen
@@ -25,6 +42,6 @@ export default function RootLayout() {
           options={{ presentation: "modal" }}
         />
       </Stack>
-    </>
+    </SafeAreaProvider>
   );
 }

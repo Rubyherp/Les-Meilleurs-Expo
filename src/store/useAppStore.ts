@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { logger } from "../utils/logger";
 import {
   DanceSession,
   createDanceSession,
@@ -70,8 +71,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   resultsBySession: {},
   errorBySession: {},
 
-  setShowingCreate: (show) => set({ isShowingCreate: show }),
-  setPresentedSession: (session) => set({ presentedSession: session }),
+  setShowingCreate: (show) => {
+    logger.store.action("setShowingCreate", { show });
+    set({ isShowingCreate: show });
+  },
+  setPresentedSession: (session) => {
+    logger.store.action("setPresentedSession", { sessionId: session?.id });
+    set({ presentedSession: session });
+  },
 
   createSession: (title, isGroup, mediaOptions) => {
     const participants = isGroup ? createGroupParticipants() : [];
@@ -84,6 +91,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       ),
       ...mediaOptions,
     };
+    logger.store.action("createSession", { id: session.id, title, isGroup });
     set((state) => ({
       sessions: [session, ...state.sessions],
       participantsBySession: {
@@ -102,13 +110,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     })),
 
   seedFromBackend: async (targetSessionId, backendSessionId) => {
-    set((state) => ({
-      analyzingSessionId: targetSessionId,
-      errorBySession: {
-        ...state.errorBySession,
-        [targetSessionId]: undefined as unknown as string,
-      },
-    }));
+    logger.store.action("seedFromBackend", { targetSessionId, backendSessionId });
+    set((state) => {
+      const errorBySession = { ...state.errorBySession };
+      delete errorBySession[targetSessionId];
+      return { analyzingSessionId: targetSessionId, errorBySession };
+    });
     try {
       const remoteResults = await getRemoteResults(backendSessionId);
       const phase4 = normalizePhase4Result(remoteResults.metadata);
@@ -132,6 +139,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         analyzingSessionId: null,
       }));
     } catch (err) {
+      logger.error("seedFromBackend", err);
       set((state) => ({
         errorBySession: {
           ...state.errorBySession,
@@ -142,17 +150,18 @@ export const useAppStore = create<AppState>((set, get) => ({
         },
         analyzingSessionId: null,
       }));
+      // Rethrow so callers (e.g. analysis screen) can react to the failure
+      throw err;
     }
   },
 
   seedComparisonFromBackend: async (targetSessionId, backendSessionId) => {
-    set((state) => ({
-      analyzingSessionId: targetSessionId,
-      errorBySession: {
-        ...state.errorBySession,
-        [targetSessionId]: undefined as unknown as string,
-      },
-    }));
+    logger.store.action("seedComparisonFromBackend", { targetSessionId, backendSessionId });
+    set((state) => {
+      const errorBySession = { ...state.errorBySession };
+      delete errorBySession[targetSessionId];
+      return { analyzingSessionId: targetSessionId, errorBySession };
+    });
     try {
       const remoteResults = await getRemoteResults(backendSessionId);
       const comparison = normalizePhase5Result(
@@ -178,6 +187,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         analyzingSessionId: null,
       }));
     } catch (err) {
+      logger.error("seedComparisonFromBackend", err);
       set((state) => ({
         errorBySession: {
           ...state.errorBySession,
@@ -188,10 +198,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         },
         analyzingSessionId: null,
       }));
+      // Rethrow so callers (e.g. analysis screen) can react to the failure
+      throw err;
     }
   },
 
   analyze: async (session) => {
+    logger.store.action("analyze", { sessionId: session.id });
     set((state) => {
       const errorBySession = { ...state.errorBySession };
       delete errorBySession[session.id];
@@ -212,6 +225,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         analyzingSessionId: null,
       }));
     } catch (err) {
+      logger.error("analyze", err);
       set((state) => ({
         errorBySession: {
           ...state.errorBySession,
@@ -222,6 +236,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         },
         analyzingSessionId: null,
       }));
+      // Rethrow so callers (e.g. analysis screen) can react to the failure
+      throw err;
     }
   },
 }));

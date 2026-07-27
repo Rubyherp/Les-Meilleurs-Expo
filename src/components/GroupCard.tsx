@@ -1,13 +1,14 @@
-import { View, Text } from "react-native";
+import { View, Text, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 interface Props {
   name: string;
   detail: string;
   isEmpty?: boolean;
+  onPress?: () => void;
 }
 
-export default function GroupCard({ name, detail, isEmpty = false }: Props) {
+function GroupCardContent({ name, detail, isEmpty }: Props) {
   return (
     <View className="flex-row items-center p-3.5 bg-white/60 border border-lesLine rounded-2xl gap-3.5">
       <View
@@ -25,5 +26,25 @@ export default function GroupCard({ name, detail, isEmpty = false }: Props) {
         <Text className="text-sm text-lesMuted">{detail}</Text>
       </View>
     </View>
+  );
+}
+
+export default function GroupCard({ name, detail, isEmpty = false, onPress }: Props) {
+  if (!onPress) {
+    return <GroupCardContent name={name} detail={detail} isEmpty={isEmpty} />;
+  }
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => ({
+        opacity: pressed ? 0.7 : 1,
+        transform: [{ scale: pressed ? 0.985 : 1 }],
+      })}
+      accessibilityRole="button"
+      accessibilityLabel={`${name}, ${detail}`}
+    >
+      <GroupCardContent name={name} detail={detail} isEmpty={isEmpty} />
+    </Pressable>
   );
 }

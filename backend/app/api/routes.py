@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import BinaryIO, Literal, cast
 from uuid import UUID
 
+from app.core.logger import logger
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -72,6 +74,7 @@ async def create_session(db: AsyncSession = Depends(get_db)) -> SessionCreateRes
     db.add(session)
     await db.commit()
     await db.refresh(session)
+    logger.api("POST", f"/sessions/{session.id}", "session created")
     return SessionCreateResponse(
         session_id=session.id,
         status=session.status,
@@ -90,6 +93,7 @@ async def set_calibration(
         raise HTTPException(status_code=404, detail="Session not found.")
     session.calibration = {"points": [list(point) for point in payload.points]}
     await db.commit()
+    logger.api("POST", f"/sessions/{session_id}/calibration", "calibration saved")
     return CalibrationResponse(session_id=session_id, points=payload.points)
 
 
@@ -134,6 +138,7 @@ async def store_reference_video(
     media = await _store_video(session_id, video, db, storage, role="reference")
     db.add(media)
     await db.commit()
+    logger.api("POST", f"/sessions/{session_id}/reference", f"media_id={media.id}")
     return RoleMediaResponse(session_id=session_id, media_id=media.id, role="reference")
 
 
@@ -153,6 +158,7 @@ async def store_attempt_video(
     media = await _store_video(session_id, video, db, storage, role="attempt")
     db.add(media)
     await db.commit()
+    logger.api("POST", f"/sessions/{session_id}/attempt", f"media_id={media.id}")
     return RoleMediaResponse(session_id=session_id, media_id=media.id, role="attempt")
 
 
@@ -204,6 +210,7 @@ async def create_comparison(
     db.add(job)
     await db.commit()
     await db.refresh(job)
+    logger.api("POST", f"/sessions/{session_id}/compare", f"job_id={job.id} mode={job.mode}")
     comparison_task_id = job.id
     comparison_mode = job.mode
     task_status = job.status
@@ -212,8 +219,18 @@ async def create_comparison(
         job.status = "queued"
         task_status = job.status
         await db.commit()
-    except Exception:
-        await db.rollback()
+    except Exception as exc:
+        job.status = "failed"
+        logger.error("compare enqueue", str(exc))
+        job.error_message = f"Enqueue failed: {exc}"
+        session.status = "failed"
+        task_status = job.status
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to enqueue comparison task: {exc}",
+        )
+
     return ComparisonResponse(
         session_id=session_id,
         task_id=comparison_task_id,
@@ -240,6 +257,7 @@ async def upload_video(
     db.add_all([media, job])
     await db.commit()
     await db.refresh(job)
+    logger.api("POST", f"/sessions/{session_id}/upload", f"media_id={media.id} job_id={job.id}")
     stored_media_id = media.id
     task_id = job.id
     task_status = job.status
@@ -250,11 +268,19 @@ async def upload_video(
         job.status = "queued"
         task_status = job.status
         await db.commit()
-    except Exception:
-        await db.rollback()
+    except Exception as exc:
+        job.status = "failed"
+        logger.error("upload enqueue", str(exc))
+        job.error_message = f"Enqueue failed: {exc}"
+        session.status = "failed"
+        task_status = job.status
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to enqueue analysis task: {exc}",
+        )
 
     return UploadResponse(session_id=session_id, media_id=stored_media_id, task_id=task_id, status=task_status)
-
 
 @router.get("/tasks/{task_id}", response_model=TaskStatusResponse)
 async def get_task_status(task_id: UUID, db: AsyncSession = Depends(get_db)) -> TaskStatusResponse:
