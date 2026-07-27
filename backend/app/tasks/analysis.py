@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Any, BinaryIO, Callable
 from uuid import UUID
 
+from app.core.logger import logger
+
 from sqlalchemy import select
 
 from app.core.config import Settings, get_settings
@@ -149,6 +151,7 @@ async def _process_job(
         if session:
             session.status = "processing"
         await db.commit()
+        logger.task("run_analysis", f"job {job_id} started — mode={job.mode}")
 
         storage_service = storage or get_storage(settings)
         factory = pipeline_factory or build_pipeline
@@ -161,6 +164,7 @@ async def _process_job(
             future.result()
 
         if job.mode == "comparison":
+            logger.phase("starting reference pipeline")
             if session is None or session.calibration is None:
                 raise RuntimeError("Calibration is required before comparison.")
             reference_media = (
@@ -189,9 +193,11 @@ async def _process_job(
             reference_result = await _run_pipeline_for_media(
                 settings, reference_media, storage_service, session.calibration, factory, reference_progress
             )
+            logger.phase("reference complete → starting attempt pipeline")
             attempt_result = await _run_pipeline_for_media(
                 settings, attempt_media, storage_service, session.calibration, factory, attempt_progress
             )
+            logger.phase("attempt complete → running comparison")
             result_metadata = compare_result_metadata(
                 reference_result,
                 attempt_result,
@@ -203,6 +209,7 @@ async def _process_job(
                 predicted_weight=settings.comparison_predicted_weight,
             )
             await _set_progress(job_id, "processing", 95)
+            logger.phase("comparison complete → writing results")
         else:
             if media is None:
                 raise RuntimeError(f"No stored media is associated with analysis job {job_id}.")
@@ -215,6 +222,7 @@ async def _process_job(
                 progress_callback,
             )
 
+        logger.phase(f"writing results for job {job_id}")
         existing_result = (
             await db.execute(select(AnalysisResult).where(AnalysisResult.job_id == job_id))
         ).scalar_one_or_none()
@@ -228,12 +236,14 @@ async def _process_job(
         if session:
             session.status = "completed"
         await db.commit()
+        logger.task("run_analysis", f"job {job_id} completed successfully")
 
 
 async def _run_job(job_id: UUID) -> None:
     try:
         await _process_job(job_id)
     except Exception as exc:
+        logger.error(f"run_analysis job {job_id}", str(exc))
         await _set_failed(job_id, str(exc))
         raise
 
