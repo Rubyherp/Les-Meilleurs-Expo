@@ -1,5 +1,7 @@
 import { CalibrationCorners } from "../models/Calibration";
-import { Phase4ResultJson } from "../models/Phase4Result";
+import type { Phase4ResultJson } from "../models/Phase4Result";
+import type { Phase5ResultJson } from "../models/Phase5Result";
+import { logger } from "../utils/logger";
 
 declare const process: { env?: Record<string, string | undefined> };
 
@@ -20,6 +22,17 @@ export interface RemoteUploadResponse {
   status: string;
 }
 
+/**
+ * Response from role-based upload endpoints (/reference, /attempt).
+ * The backend returns session + media identifiers with the role,
+ * without a task_id or status.
+ */
+export interface RemoteUploadRoleResponse {
+  session_id: string;
+  media_id: string;
+  role: "reference" | "attempt";
+}
+
 export interface RemoteComparisonResponse {
   session_id: string;
   task_id: string;
@@ -38,11 +51,11 @@ export interface RemoteTaskResponse {
   result?: Record<string, unknown> | null;
 }
 
-export interface RemoteResultsResponse {
+export interface RemoteResultsResponse<T = Phase4ResultJson> {
   session_id: string;
   task_id: string;
   created_at: string;
-  metadata: Phase4ResultJson;
+  metadata: T;
 }
 
 export class RemoteAnalysisError extends Error {
@@ -78,6 +91,10 @@ function joinUrl(baseUrl: string, path: string): string {
 }
 
 async function request<T>(path: string, init: RequestInit = {}, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
+  const method = (init.method ?? "GET").toUpperCase();
+  logger.api.request(method, path);
+  const startedAt = Date.now();
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -89,6 +106,7 @@ async function request<T>(path: string, init: RequestInit = {}, timeoutMs = REQU
         ...(init.headers ?? {}),
       },
     });
+    logger.api.response(method, path, response.status, Date.now() - startedAt);
     const body = await response.json().catch(() => undefined);
     if (!response.ok) {
       const detail =
@@ -166,7 +184,7 @@ export async function uploadReferenceVideo(
   sessionID: string,
   uri: string,
   options?: { name?: string; type?: string }
-): Promise<RemoteUploadResponse> {
+): Promise<RemoteUploadRoleResponse> {
   const name = options?.name ?? fileNameForUri(uri);
   const form = new FormData();
   form.append(
@@ -177,7 +195,7 @@ export async function uploadReferenceVideo(
       type: options?.type ?? mimeTypeForName(name),
     } as unknown as Blob
   );
-  return request<RemoteUploadResponse>(`/sessions/${encodeURIComponent(sessionID)}/reference`, {
+  return request<RemoteUploadRoleResponse>(`/sessions/${encodeURIComponent(sessionID)}/reference`, {
     method: "POST",
     body: form,
   });
@@ -188,7 +206,7 @@ export async function uploadAttemptVideoB(
   sessionID: string,
   uri: string,
   options?: { name?: string; type?: string }
-): Promise<RemoteUploadResponse> {
+): Promise<RemoteUploadRoleResponse> {
   const name = options?.name ?? fileNameForUri(uri);
   const form = new FormData();
   form.append(
@@ -199,7 +217,7 @@ export async function uploadAttemptVideoB(
       type: options?.type ?? mimeTypeForName(name),
     } as unknown as Blob
   );
-  return request<RemoteUploadResponse>(`/sessions/${encodeURIComponent(sessionID)}/attempt`, {
+  return request<RemoteUploadRoleResponse>(`/sessions/${encodeURIComponent(sessionID)}/attempt`, {
     method: "POST",
     body: form,
   });
@@ -248,6 +266,6 @@ export async function pollRemoteTask(
   throw new RemoteAnalysisError("The analysis is taking longer than expected. Please retry.");
 }
 
-export async function getRemoteResults(sessionID: string): Promise<RemoteResultsResponse> {
-  return request<RemoteResultsResponse>(`/sessions/${encodeURIComponent(sessionID)}/results`);
+export async function getRemoteResults<T = Phase4ResultJson>(sessionID: string): Promise<RemoteResultsResponse<T>> {
+  return request<RemoteResultsResponse<T>>(`/sessions/${encodeURIComponent(sessionID)}/results`);
 }
