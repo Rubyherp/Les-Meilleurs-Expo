@@ -10,7 +10,7 @@ from app.core.logger import logger
 from sqlalchemy import select
 
 from app.core.config import Settings, get_settings
-from app.db.session import AsyncSessionLocal
+from app.db.session import AsyncSessionLocal, engine as db_engine
 from app.models import AnalysisJob, AnalysisResult, AnalysisSession, StoredMedia
 from app.services.pipeline import FramePosePipeline, ProgressEvent
 from app.services.pose import MediaPipePoseEstimator
@@ -246,6 +246,8 @@ async def _run_job(job_id: UUID) -> None:
         logger.error(f"run_analysis job {job_id}", str(exc))
         await _set_failed(job_id, str(exc))
         raise
+    finally:
+        await db_engine.dispose()
 
 
 @celery_app.task(bind=True, name="analysis.run")

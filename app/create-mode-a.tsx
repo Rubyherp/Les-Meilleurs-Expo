@@ -263,9 +263,11 @@ export default function CreateModeAScreen() {
             />
           )}
 
-          <Pressable onPress={handleAnalyze} disabled={!canAnalyze}>
-            <PrimaryButton title="Build my formation" enabled={canAnalyze} />
-          </Pressable>
+          <PrimaryButton
+            title="Build my formation"
+            enabled={canAnalyze}
+            onPress={handleAnalyze}
+          />
         </View>
       </ScrollView>
     </SafeAreaView>

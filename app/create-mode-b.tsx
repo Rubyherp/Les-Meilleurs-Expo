@@ -319,9 +319,11 @@ export default function CreateModeBScreen() {
                   detail="If the front view hides a move, capture a second take from a 45° angle. We will flag sections that cannot be read reliably."
                 />
               )}
-              <Pressable onPress={handleAnalyze} disabled={!attemptReady}>
-                <PrimaryButton title="Analyze my practice" enabled={attemptReady} />
-              </Pressable>
+              <PrimaryButton
+                title="Analyze my practice"
+                enabled={attemptReady}
+                onPress={handleAnalyze}
+              />
             </>
           )}
         </View>
