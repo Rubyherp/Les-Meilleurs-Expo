@@ -252,12 +252,15 @@ async def upload_video(
         raise HTTPException(status_code=404, detail="Session not found.")
 
     media = await _store_video(session_id, video, db, storage)
+    db.add(media)
+    await db.flush()
+    logger.api("POST", f"/sessions/{session_id}/upload", f"media_id={media.id}")
+
     job = AnalysisJob(session_id=session_id, media_id=media.id, status="pending", progress=0)
     session.status = "queued"
-    db.add_all([media, job])
+    db.add(job)
     await db.commit()
     await db.refresh(job)
-    logger.api("POST", f"/sessions/{session_id}/upload", f"media_id={media.id} job_id={job.id}")
     stored_media_id = media.id
     task_id = job.id
     task_status = job.status

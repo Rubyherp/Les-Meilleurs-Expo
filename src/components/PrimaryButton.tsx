@@ -4,12 +4,14 @@ import { Ionicons } from "@expo/vector-icons";
 interface Props {
   title: string;
   enabled: boolean;
+  onPress?: () => void;
 }
 
-export default function PrimaryButton({ title, enabled }: Props) {
+export default function PrimaryButton({ title, enabled, onPress }: Props) {
   return (
     <Pressable
-      disabled={!enabled}
+      onPress={onPress}
+      disabled={!enabled || !onPress}
       className={`flex-row items-center p-[18px] rounded-2xl ${
         enabled ? "bg-lesInk" : "bg-lesLine"
       }`}

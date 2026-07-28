@@ -1,3 +1,5 @@
+import { randomUUID } from "expo-crypto";
+
 export enum ParticipantRole {
   Dancer = "dancer",
   Instructor = "instructor",
@@ -11,8 +13,8 @@ export interface GroupParticipant {
 
 export function createGroupParticipants(): GroupParticipant[] {
   return [
-    { id: crypto.randomUUID(), displayName: "You", role: ParticipantRole.Dancer },
-    { id: crypto.randomUUID(), displayName: "Maya", role: ParticipantRole.Dancer },
-    { id: crypto.randomUUID(), displayName: "Noah", role: ParticipantRole.Dancer },
+    { id: randomUUID(), displayName: "You", role: ParticipantRole.Dancer },
+    { id: randomUUID(), displayName: "Maya", role: ParticipantRole.Dancer },
+    { id: randomUUID(), displayName: "Noah", role: ParticipantRole.Dancer },
   ];
 }

@@ -1,3 +1,4 @@
+import { randomUUID } from "expo-crypto";
 import { CalibrationCorners } from "./Calibration";
 
 export interface DanceSession {
@@ -26,10 +27,10 @@ export function createDanceSession(
   participantIDs?: string[]
 ): DanceSession {
   const participants = participantIDs ?? (isGroup
-    ? [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()]
+    ? [randomUUID(), randomUUID(), randomUUID()]
     : []);
   return {
-    id: crypto.randomUUID(),
+    id: randomUUID(),
     title: title.trim() || "Social trend practice",
     recordedAt: Date.now(),
     duration,
