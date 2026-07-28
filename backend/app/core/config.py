@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     comparison_unmatched_penalty: float = Field(default=1.25, ge=0)
     comparison_include_predicted: bool = False
     comparison_predicted_weight: float = Field(default=0.1, gt=0, le=1)
+    llm_api_key: str = ""
+    llm_model: str = "gpt-4o-mini"
+    llm_temperature: float = 0.3
     yolo_model_path: str = "models/yolo11n.pt"
     pose_model_path: str = "models/pose_landmarker_lite.task"
     ml_device: str = "cpu"

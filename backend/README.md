@@ -93,6 +93,26 @@ Copy `.env.example` to `.env` and adjust:
 - `COMPARISON_INCLUDE_PREDICTED` and `COMPARISON_PREDICTED_WEIGHT` — optional
   low-weight use of occluded/predicted samples; excluded by default.
 
+## Coaching
+
+Coaching analysis can be triggered via `POST /sessions/{session_id}/coach` and
+retrieved via `GET /sessions/{session_id}/coach`. It produces a four-phase
+analysis report (detection, tracking, calibration, comparison) with strengths,
+issues, and suggestions per phase.
+
+By default, coaching uses deterministic analysis (no API calls). To enable
+LLM-powered coaching with richer insights, set the following environment
+variables:
+
+- `LLM_API_KEY` — your OpenAI-compatible API key. When empty (default),
+  deterministic reports are generated instead.
+- `LLM_MODEL` — the model to use (default: `gpt-4o-mini`).
+- `LLM_TEMPERATURE` — response creativity (default: `0.3`).
+
+The LLM integration is optional—every phase can fall back to deterministic
+analysis independently, so a missing key or a failed API call never prevents
+report generation.
+
 ## Reference-vs-attempt comparison
 
 The comparison job runs the existing Phase 4 pipeline once for the stored

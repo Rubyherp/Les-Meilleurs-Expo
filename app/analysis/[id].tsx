@@ -5,6 +5,8 @@ import { logger } from "@/utils/logger";
 import { useAppStore } from "@/store/useAppStore";
 import ProcessingView from "@/components/ProcessingView";
 import AnalysisResultsView from "@/components/AnalysisResultsView";
+import { triggerCoach, getCoachReport } from "@/services/coachApi";
+import type { CoachResponse } from "@/models/CoachReport";
 
 const SEED_SESSION_ID = "11111111-1111-1111-1111-111111111111";
 const SEED_BACKEND_SESSION_ID = "ddd418e0-8893-4862-984a-5304b766805d";
@@ -26,6 +28,9 @@ export default function AnalysisScreen() {
   const setShowingCreate = useAppStore((state) => state.setShowingCreate);
   const router = useRouter();
   const [phase, setPhase] = useState("preparing");
+  const [coachResponse, setCoachResponse] = useState<CoachResponse | null>(null);
+  const [coachLoading, setCoachLoading] = useState(false);
+  const [coachError, setCoachError] = useState<string | null>(null);
   const startedSessionId = useRef<string | null>(null);
   const mountedRef = useRef(true);
   const sessionId = Array.isArray(id) ? id[0] : id;
@@ -41,6 +46,26 @@ export default function AnalysisScreen() {
   const participants = sessionId
     ? participantsBySession[sessionId] ?? []
     : [];
+
+  const requestCoach = useCallback(async () => {
+    if (!sessionId) return;
+    setCoachLoading(true);
+    setCoachError(null);
+    try {
+      const result = await triggerCoach(sessionId);
+      if (result.status === "completed") {
+        setCoachResponse(result);
+      } else {
+        await new Promise((r) => setTimeout(r, 1500));
+        const polled = await getCoachReport(sessionId);
+        setCoachResponse(polled);
+      }
+    } catch (e) {
+      setCoachError(e instanceof Error ? e.message : "Coaching unavailable");
+    } finally {
+      setCoachLoading(false);
+    }
+  }, [sessionId]);
 
   const runAnalysis = useCallback(async (isRetry = false) => {
     if (
@@ -136,6 +161,10 @@ export default function AnalysisScreen() {
           session={session}
           result={result}
           participants={participants}
+          coachResponse={coachResponse}
+          coachLoading={coachLoading}
+          coachError={coachError}
+          onRequestCoach={requestCoach}
           onPracticeAgain={() => {
             logger.ui.press("Practice again");
             router.back();

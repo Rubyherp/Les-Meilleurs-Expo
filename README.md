@@ -157,6 +157,39 @@ OpenCV, YOLOv11, MediaPipe, ByteTrack, SciPy DTW
 
 **Infra:** Docker Compose (API, worker, Postgres, Redis, MinIO)
 
+## AI Coaching (all phases)
+
+The backend generates per-phase coaching reports covering all four analysis
+stages:
+
+| Phase | Name | What it analyzes |
+|-------|------|-----------------|
+| 2 | Detection & Pose | Person detection coverage and pose estimation quality |
+| 3 | Tracking & Continuity | Identity continuity, occlusion rates, track loss |
+| 4 | Calibration & Space | Top-down projection quality and spatial coverage |
+| 5 | Reference Comparison | Reference-vs-attempt similarity and deviation scores |
+
+Phase 5 shows "Not applicable" in single-video Mode A — all four phases are
+always present in every report.
+
+The coaching works **deterministically without any API key** — it inspects the
+analysis result metadata directly and produces data-grounded insights. Optionally
+set `LLM_API_KEY` in `backend/.env` to enhance reports with an LLM:
+
+```
+LLM_API_KEY=sk-your-key
+LLM_MODEL=gpt-4o-mini
+LLM_TEMPERATURE=0.3
+```
+
+Coaching is triggered from the analysis results screen via a "Get AI Coaching"
+button, or programmatically:
+
+```sh
+curl -s -X POST "http://localhost:8000/api/v1/sessions/$SESSION_ID/coach" | jq .
+curl -s "http://localhost:8000/api/v1/sessions/$SESSION_ID/coach" | jq .report.phases
+```
+
 ## License
 
 MIT

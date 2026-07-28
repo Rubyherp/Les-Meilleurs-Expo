@@ -20,6 +20,7 @@ dependencies = [
     "redis==5.2.1",
     "boto3==1.36.18",
     "numpy==1.26.4",
+    "openai>=1.60.0",
     "scipy==1.16.1",
     "opencv-python==4.11.0.86",
     "mediapipe==0.10.18",

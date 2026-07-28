@@ -6,15 +6,21 @@ import SuggestionCard from "./SuggestionCard";
 import GroupSyncCard from "./GroupSyncCard";
 import TopDownVisualization from "./TopDownVisualization";
 import Phase5ComparisonView from "./Phase5ComparisonView";
+import CoachFeedbackView from "./CoachFeedbackView";
 import { DanceSession } from "../models/DanceSession";
 import { AnalysisResult } from "../models/AnalysisResult";
 import { GroupParticipant } from "../models/GroupParticipant";
 import { formatScore } from "../utils/format";
+import type { CoachResponse } from "@/models/CoachReport";
 
 interface Props {
   session: DanceSession;
   result: AnalysisResult;
   participants: GroupParticipant[];
+  coachResponse: CoachResponse | null | undefined;
+  coachLoading: boolean;
+  coachError: string | null;
+  onRequestCoach: () => void;
   onPracticeAgain: () => void;
 }
 
@@ -22,6 +28,10 @@ export default function AnalysisResultsView({
   session,
   result,
   participants,
+  coachResponse,
+  coachLoading,
+  coachError,
+  onRequestCoach,
   onPracticeAgain,
 }: Props) {
   const share = async () => {
@@ -77,6 +87,13 @@ export default function AnalysisResultsView({
             durationSeconds={session.duration}
           />
         )}
+
+        <CoachFeedbackView
+          coachResponse={coachResponse}
+          loading={coachLoading}
+          error={coachError}
+          onTrigger={onRequestCoach}
+        />
 
         <View className="gap-3">
           <Text className="text-lg font-bold text-lesInk">What's working</Text>

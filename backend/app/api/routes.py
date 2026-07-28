@@ -26,6 +26,8 @@ from app.schemas.session import (
     UploadResponse,
 )
 from app.services.storage import Storage
+from app.schemas.coaching import CoachingReport, CoachingResponse
+from app.services.coaching.orchestrator import run_coaching
 from app.services.tasks import TaskDispatcher
 from app.services.uploads import UploadValidationError, validate_and_buffer_upload
 
@@ -302,4 +304,70 @@ async def get_task_status(task_id: UUID, db: AsyncSession = Depends(get_db)) -> 
         progress=job.progress,
         error=job.error_message,
         result=job.result.result_metadata if job.result else None,
+    )
+
+
+@router.post("/sessions/{session_id}/coach", response_model=CoachingResponse)
+async def request_coaching(session_id: UUID, db: AsyncSession = Depends(get_db)) -> CoachingResponse:
+    session = await db.get(AnalysisSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    
+    # Find latest completed analysis result
+    query = (
+        select(AnalysisResult, AnalysisJob)
+        .join(AnalysisJob, AnalysisJob.id == AnalysisResult.job_id)
+        .where(AnalysisJob.session_id == session_id)
+        .order_by(AnalysisResult.created_at.desc())
+        .limit(1)
+    )
+    row = (await db.execute(query)).first()
+    if row is None:
+        return CoachingResponse(
+            session_id=session_id, status="no_data",
+            message="No analysis result found for this session."
+        )
+    result, job = row
+    
+    mode = job.mode if job.mode else "single"
+    report = await run_coaching(session_id, mode, result.result_metadata)
+    
+    # Store report back in result_metadata for GET caching
+    result.result_metadata["coaching_report"] = report.model_dump(mode="json")
+    await db.commit()
+    
+    return CoachingResponse(session_id=session_id, report=report, status="completed")
+
+@router.get("/sessions/{session_id}/coach", response_model=CoachingResponse)
+async def get_coaching(session_id: UUID, db: AsyncSession = Depends(get_db)) -> CoachingResponse:
+    session = await db.get(AnalysisSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    
+    query = (
+        select(AnalysisResult, AnalysisJob)
+        .join(AnalysisJob, AnalysisJob.id == AnalysisResult.job_id)
+        .where(AnalysisJob.session_id == session_id)
+        .order_by(AnalysisResult.created_at.desc())
+        .limit(1)
+    )
+    row = (await db.execute(query)).first()
+    if row is None:
+        return CoachingResponse(
+            session_id=session_id, status="no_data",
+            message="No analysis result found for this session."
+        )
+    result, _ = row
+    
+    cached = result.result_metadata.get("coaching_report")
+    if cached:
+        return CoachingResponse(
+            session_id=session_id,
+            report=CoachingReport(**cached),
+            status="completed"
+        )
+    
+    return CoachingResponse(
+        session_id=session_id, status="no_data",
+        message="Coaching has not been generated yet. Use POST to trigger."
     )
