@@ -15,6 +15,12 @@ import { normalizePhase5Result } from "../models/Phase5Result";
 import { Phase5ResultJson } from "../models/Phase5Result";
 import { analyzeSession } from "../services/analysisPipeline";
 import { getRemoteResults } from "../services/remoteAnalysisApi";
+import type {
+  CoachReport,
+  CoachReportResponse,
+} from "../models/CoachReport";
+import { normalizeCoachReportResponse } from "../models/CoachReport";
+import { requestCoachReport } from "../services/coachApi";
 
 const SEED_SESSION_ID = "11111111-1111-1111-1111-111111111111";
 const SEED_COMPARISON_SESSION_ID = "22222222-2222-2222-2222-222222222222";
@@ -45,6 +51,15 @@ interface AppState {
     targetSessionId: string,
     backendSessionId: string
   ) => Promise<void>;
+
+  // ── Coaching ────────────────────────────────────────────────────────────
+  coachReportsBySession: Record<string, CoachReport | null>;
+  coachLoadingBySession: Record<string, boolean>;
+  coachErrorBySession: Record<string, string>;
+  requestCoaching: (
+    sessionId: string,
+    backendSessionId?: string
+  ) => Promise<void>;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -70,6 +85,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   analyzingSessionId: null,
   resultsBySession: {},
   errorBySession: {},
+  coachReportsBySession: {},
+  coachLoadingBySession: {},
+  coachErrorBySession: {},
 
   setShowingCreate: (show) => {
     logger.store.action("setShowingCreate", { show });
@@ -237,6 +255,54 @@ export const useAppStore = create<AppState>((set, get) => ({
         analyzingSessionId: null,
       }));
       // Rethrow so callers (e.g. analysis screen) can react to the failure
+      throw err;
+    }
+  },
+
+  requestCoaching: async (sessionId, backendSessionId) => {
+    const effectiveBackendId = backendSessionId ?? sessionId;
+    logger.store.action("requestCoaching", { sessionId, backendSessionId });
+    set((state) => {
+      const coachErrorBySession = { ...state.coachErrorBySession };
+      delete coachErrorBySession[sessionId];
+      return {
+        coachLoadingBySession: {
+          ...state.coachLoadingBySession,
+          [sessionId]: true,
+        },
+        coachErrorBySession,
+      };
+    });
+    try {
+      const raw: CoachReportResponse = normalizeCoachReportResponse(
+        await requestCoachReport(effectiveBackendId)
+      );
+      set((state) => ({
+        coachReportsBySession: {
+          ...state.coachReportsBySession,
+          [sessionId]: raw.report,
+        },
+        coachLoadingBySession: {
+          ...state.coachLoadingBySession,
+          [sessionId]: false,
+        },
+      }));
+    } catch (err) {
+      logger.error("requestCoaching", err);
+      set((state) => ({
+        coachLoadingBySession: {
+          ...state.coachLoadingBySession,
+          [sessionId]: false,
+        },
+        coachErrorBySession: {
+          ...state.coachErrorBySession,
+          [sessionId]:
+            err instanceof Error
+              ? err.message
+              : "Could not request coaching for this session.",
+        },
+      }));
+      // Rethrow so callers can react to the failure
       throw err;
     }
   },

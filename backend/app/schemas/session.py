@@ -71,3 +71,34 @@ class ComparisonResponse(BaseModel):
     mode: str
     reference_media_id: UUID
     attempt_media_id: UUID
+
+
+# ── Coaching ─────────────────────────────────────────────────────────────
+
+class CoachIssue(BaseModel):
+    description: str
+    severity: str = "medium"  # low, medium, high
+
+
+class AgentInsight(BaseModel):
+    agent_name: str
+    summary: str
+    strengths: list[str]
+    issues: list[CoachIssue]
+    suggestions: list[str]
+    confidence: float
+
+
+class CoachingReport(BaseModel):
+    session_id: UUID
+    mode: str  # "single" | "comparison"
+    overall_summary: str
+    agents: list[AgentInsight]
+    generated_at: datetime
+
+
+class CoachingResponse(BaseModel):
+    session_id: UUID
+    report: CoachingReport | None = None
+    status: str  # "completed" | "not_configured" | "no_data" | "processing"
+    message: str = ""

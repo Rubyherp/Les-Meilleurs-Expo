@@ -5,6 +5,7 @@ import { logger } from "@/utils/logger";
 import { useAppStore } from "@/store/useAppStore";
 import ProcessingView from "@/components/ProcessingView";
 import AnalysisResultsView from "@/components/AnalysisResultsView";
+import { normalizeCoachReportResponse } from "@/models/CoachReport";
 
 const SEED_SESSION_ID = "11111111-1111-1111-1111-111111111111";
 const SEED_BACKEND_SESSION_ID = "ddd418e0-8893-4862-984a-5304b766805d";
@@ -24,6 +25,10 @@ export default function AnalysisScreen() {
   const seedFromBackend = useAppStore((state) => state.seedFromBackend);
   const seedComparisonFromBackend = useAppStore((state) => state.seedComparisonFromBackend);
   const setShowingCreate = useAppStore((state) => state.setShowingCreate);
+  const coachReportsBySession = useAppStore((state) => state.coachReportsBySession);
+  const coachLoadingBySession = useAppStore((state) => state.coachLoadingBySession);
+  const coachErrorBySession = useAppStore((state) => state.coachErrorBySession);
+  const requestCoaching = useAppStore((state) => state.requestCoaching);
   const router = useRouter();
   const [phase, setPhase] = useState("preparing");
   const startedSessionId = useRef<string | null>(null);
@@ -41,6 +46,9 @@ export default function AnalysisScreen() {
   const participants = sessionId
     ? participantsBySession[sessionId] ?? []
     : [];
+  const coachReport = sessionId ? coachReportsBySession[sessionId] : undefined;
+  const coachLoading = sessionId ? coachLoadingBySession[sessionId] : false;
+  const coachError = sessionId ? coachErrorBySession[sessionId] : undefined;
 
   const runAnalysis = useCallback(async (isRetry = false) => {
     if (
@@ -112,6 +120,41 @@ export default function AnalysisScreen() {
     };
   }, [runAnalysis]);
 
+  // Auto-trigger coaching once analysis completes
+  const coachingTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (
+      !result ||
+      coachReport !== undefined ||
+      coachLoading ||
+      coachError !== undefined ||
+      coachingTriggeredRef.current
+    )
+      return;
+    coachingTriggeredRef.current = true;
+    const backendId =
+      sessionId === SEED_SESSION_ID
+        ? SEED_BACKEND_SESSION_ID
+        : sessionId === SEED_COMPARISON_SESSION_ID
+          ? SEED_COMPARISON_BACKEND_ID
+          : session?.remoteSessionID;
+    const timer = setTimeout(() => {
+      if (mountedRef.current) {
+        logger.phase("requesting coaching");
+        requestCoaching(sessionId, backendId).catch(() => {});
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [
+    result,
+    session?.remoteSessionID,
+    sessionId,
+    coachReport,
+    coachLoading,
+    coachError,
+    requestCoaching,
+  ]);
+
   if (!session) {
     return (
       <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-lesBackground">
@@ -136,6 +179,18 @@ export default function AnalysisScreen() {
           session={session}
           result={result}
           participants={participants}
+          coachReport={coachReport ?? null}
+          coachLoading={coachLoading}
+          coachError={coachError ?? null}
+          onRequestCoach={session ? () => {
+            const backendId =
+              sessionId === SEED_SESSION_ID
+                ? SEED_BACKEND_SESSION_ID
+                : sessionId === SEED_COMPARISON_SESSION_ID
+                  ? SEED_COMPARISON_BACKEND_ID
+                  : session?.remoteSessionID;
+            requestCoaching(sessionId, backendId).catch(() => {});
+          } : undefined}
           onPracticeAgain={() => {
             logger.ui.press("Practice again");
             router.back();

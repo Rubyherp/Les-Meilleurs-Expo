@@ -52,3 +52,16 @@ export {
   type Phase5ResultJson,
   normalizePhase5Result,
 } from "./Phase5Result";
+export {
+  type CoachStatus,
+  type CoachReportAgentIssue,
+  type CoachReportAgent,
+  type CoachReport,
+  type CoachReportResponse,
+  type CoachReportAgentIssueJson,
+  type CoachReportAgentJson,
+  type CoachReportJson,
+  type CoachReportResponseJson,
+  normalizeCoachReport,
+  normalizeCoachReportResponse,
+} from "./CoachReport";
