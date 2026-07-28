@@ -6,11 +6,9 @@ import SuggestionCard from "./SuggestionCard";
 import GroupSyncCard from "./GroupSyncCard";
 import TopDownVisualization from "./TopDownVisualization";
 import Phase5ComparisonView from "./Phase5ComparisonView";
-import CoachFeedbackView from "./CoachFeedbackView";
 import { DanceSession } from "../models/DanceSession";
 import { AnalysisResult } from "../models/AnalysisResult";
 import { GroupParticipant } from "../models/GroupParticipant";
-import type { CoachReport } from "../models/CoachReport";
 import { formatScore } from "../utils/format";
 
 interface Props {
@@ -18,10 +16,6 @@ interface Props {
   result: AnalysisResult;
   participants: GroupParticipant[];
   onPracticeAgain: () => void;
-  coachReport?: CoachReport | null;
-  coachLoading?: boolean;
-  coachError?: string | null;
-  onRequestCoach?: () => void;
 }
 
 export default function AnalysisResultsView({
@@ -29,10 +23,6 @@ export default function AnalysisResultsView({
   result,
   participants,
   onPracticeAgain,
-  coachReport,
-  coachLoading,
-  coachError,
-  onRequestCoach,
 }: Props) {
   const share = async () => {
     await Share.share({
@@ -88,33 +78,22 @@ export default function AnalysisResultsView({
           />
         )}
 
-        {onRequestCoach ? (
-          <CoachFeedbackView
-            report={coachReport ?? null}
-            loading={coachLoading}
-            error={coachError ?? null}
-            onRetry={onRequestCoach}
-          />
-        ) : (
-          <>
-            <View className="gap-3">
-              <Text className="text-lg font-bold text-lesInk">What's working</Text>
-              <PositiveNote text="Strong opening position" />
-              <PositiveNote text="Good consistency through the first phrase" />
-            </View>
+        <View className="gap-3">
+          <Text className="text-lg font-bold text-lesInk">What's working</Text>
+          <PositiveNote text="Strong opening position" />
+          <PositiveNote text="Good consistency through the first phrase" />
+        </View>
 
-            <View className="gap-3">
-              <Text className="text-lg font-bold text-lesInk">Try next</Text>
-              {result.issues.map((issue) => (
-                <SuggestionCard
-                  key={issue.id}
-                  issue={issue}
-                  onReplay={() => undefined}
-                />
-              ))}
-            </View>
-          </>
-        )}
+        <View className="gap-3">
+          <Text className="text-lg font-bold text-lesInk">Try next</Text>
+          {result.issues.map((issue) => (
+            <SuggestionCard
+              key={issue.id}
+              issue={issue}
+              onReplay={() => undefined}
+            />
+          ))}
+        </View>
 
         <View className="flex-row gap-3">
           <Pressable

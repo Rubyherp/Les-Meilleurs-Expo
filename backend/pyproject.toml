@@ -25,7 +25,6 @@ dependencies = [
     "mediapipe==0.10.18",
     "ultralytics==8.3.75",
     "lap==0.5.13",
-    "openai>=1.60.0",
 ]
 
 [project.optional-dependencies]

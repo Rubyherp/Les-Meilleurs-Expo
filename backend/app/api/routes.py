@@ -14,12 +14,9 @@ from app.api.dependencies import get_storage_service, get_task_dispatcher
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models import AnalysisJob, AnalysisResult, AnalysisSession, StoredMedia
-from app.services.coaching import run_coaching
 from app.schemas.session import (
     CalibrationRequest,
     CalibrationResponse,
-    CoachingReport,
-    CoachingResponse,
     ComparisonRequest,
     ComparisonResponse,
     RoleMediaResponse,
@@ -287,119 +284,6 @@ async def upload_video(
         )
 
     return UploadResponse(session_id=session_id, media_id=stored_media_id, task_id=task_id, status=task_status)
-
-
-async def _get_latest_coaching_result(
-    session_id: UUID,
-    db: AsyncSession,
-) -> tuple[AnalysisResult, AnalysisJob] | None:
-    """Return (result, job) for the session's latest analysis, or None.
-
-    Raises 404 if the session itself does not exist.
-    """
-    if await db.get(AnalysisSession, session_id) is None:
-        raise HTTPException(status_code=404, detail="Session not found.")
-    query = (
-        select(AnalysisResult, AnalysisJob)
-        .join(AnalysisJob, AnalysisJob.id == AnalysisResult.job_id)
-        .where(AnalysisJob.session_id == session_id)
-        .order_by(AnalysisResult.created_at.desc())
-        .limit(1)
-    )
-    row = (await db.execute(query)).first()
-    return (row[0], row[1]) if row is not None else None
-
-
-@router.post("/sessions/{session_id}/coach", response_model=CoachingResponse)
-async def request_coaching(
-    session_id: UUID,
-    db: AsyncSession = Depends(get_db),
-) -> CoachingResponse:
-    """Run multi-agent coaching analysis on the session's latest result."""
-    row = await _get_latest_coaching_result(session_id, db)
-    if row is None:
-        return CoachingResponse(
-            session_id=session_id,
-            status="no_data",
-            message="No analysis result found for this session.",
-        )
-
-    result, job = row
-
-    # Return cached coaching report if one already exists
-    existing = result.result_metadata.get("coaching_report")
-    if existing is not None:
-        report = CoachingReport(**existing)
-        return CoachingResponse(
-            session_id=session_id,
-            report=report,
-            status="completed",
-        )
-
-    settings = get_settings()
-    mode = job.mode  # "single" or "comparison"
-
-    async def _run() -> CoachingReport:
-        return await run_coaching(session_id, mode, result.result_metadata)
-
-    # If no LLM key is set, return a deterministic fallback
-    if not settings.llm_api_key:
-        fallback = await _run()
-        result.result_metadata["coaching_report"] = fallback.model_dump(mode="json")
-        await db.commit()
-        return CoachingResponse(
-            session_id=session_id,
-            report=fallback,
-            status="completed",
-            message="LLM key not configured; generated data-driven insights only.",
-        )
-
-    try:
-        report = await _run()
-    except Exception as exc:
-        logger.error("coaching", str(exc))
-        return CoachingResponse(
-            session_id=session_id,
-            status="processing",
-            message=f"Coaching failed: {exc}",
-        )
-
-    # Persist the coaching report alongside analysis data
-    result.result_metadata["coaching_report"] = report.model_dump(mode="json")
-    await db.commit()
-
-    return CoachingResponse(session_id=session_id, report=report, status="completed")
-
-
-@router.get("/sessions/{session_id}/coach", response_model=CoachingResponse)
-async def get_coaching(
-    session_id: UUID,
-    db: AsyncSession = Depends(get_db),
-) -> CoachingResponse:
-    """Return the cached coaching report if one exists."""
-    row = await _get_latest_coaching_result(session_id, db)
-    if row is None:
-        return CoachingResponse(
-            session_id=session_id,
-            status="no_data",
-            message="No analysis result found for this session.",
-        )
-
-    result = row[0]
-    existing = result.result_metadata.get("coaching_report")
-    if existing is None:
-        return CoachingResponse(
-            session_id=session_id,
-            status="no_data",
-            message="No coaching report yet. POST to /coach to generate one.",
-        )
-
-    return CoachingResponse(
-        session_id=session_id,
-        report=CoachingReport(**existing),
-        status="completed",
-    )
-
 
 @router.get("/tasks/{task_id}", response_model=TaskStatusResponse)
 async def get_task_status(task_id: UUID, db: AsyncSession = Depends(get_db)) -> TaskStatusResponse:
