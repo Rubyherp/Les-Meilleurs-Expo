@@ -45,3 +45,6 @@ assets/videos/*.mp4
 # generated native folders
 /ios
 /android
+
+# Playwright MCP
+.playwright-mcp/
