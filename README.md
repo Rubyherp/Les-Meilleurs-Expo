@@ -28,18 +28,13 @@ formation data, or "Compare two takes" for Mode B DTW comparison.
 ```
 ├── app/              Expo Router screen files
 ├── src/
-│   ├── components/   Reusable UI (TopDownGrid, CoachFeedbackView, etc.)
-│   ├── models/       TypeScript types (CoachReport, AnalysisResult, etc.)
-│   ├── services/     API clients (analysis, coaching, remote)
+│   ├── components/   Reusable UI (TopDownGrid, TimelineScrubber, etc.)
+│   ├── models/       TypeScript model types
+│   ├── services/     API client, analysis pipeline
 │   ├── store/        Zustand state management
 │   └── theme/        Shared colors and tokens
 ├── backend/          Python/FastAPI video analysis server
-│   ├── app/
-│   │   ├── api/      Route handlers
-│   │   ├── services/
-│   │   │   └── coaching/  Multi-agent coaching agents
-│   │   ├── tasks/    Celery async workers
-│   │   └── models.py DB models
+│   ├── app/          API, services, models, tasks
 │   └── tests/        pytest test suite (38 tests)
 ├── app.json          Expo configuration
 └── package.json      Mobile dependencies
@@ -152,48 +147,6 @@ pytest                    # 38 tests
 uvicorn app.main:app --reload
 ```
 
-## AI Coaching
-
-After analysis completes, a multi-agent system reviews the CV results and
-produces actionable practice notes:
-
-| Agent | Analyzes |
-|-------|----------|
-| **Formation** | Dancer spacing, group shapes, symmetry, drift over time |
-| **Timing** | Synchronization, tempo, entry/exit timing |
-| **Spatial** | Individual trajectories, stage coverage, movement patterns |
-| **Comparison** | Reference vs attempt gaps, deviation trends (Mode B only) |
-
-### Default — no config needed
-
-Without an API key, agents generate **deterministic data-driven insights**
-directly from the pose/tracking/grid data. Coaching works out of the box.
-
-### With an LLM (optional)
-
-Add to `backend/.env`:
-
-```sh
-LLM_API_KEY=sk-your-key-here
-LLM_MODEL=deepseek-chat          # or gpt-4o-mini
-LLM_BASE_URL=https://api.deepseek.com   # omit for OpenAI
-```
-
-| Provider | `LLM_MODEL` | `LLM_BASE_URL` |
-|----------|-------------|----------------|
-| OpenAI | `gpt-4o-mini` | *(omit)* |
-| DeepSeek | `deepseek-chat` | `https://api.deepseek.com` |
-
-### API
-
-```sh
-# Trigger coaching for a session
-curl -s -X POST http://localhost:8000/api/v1/sessions/$SESSION_ID/coach
-
-# Retrieve cached report
-curl -s http://localhost:8000/api/v1/sessions/$SESSION_ID/coach
-```
-
 ## Tech stack
 
 **Mobile:** React Native, Expo SDK 54, Expo Router, NativeWind/Tailwind,
@@ -201,9 +154,6 @@ Reanimated, Zustand
 
 **Backend:** FastAPI, Celery/Redis, PostgreSQL, SQLAlchemy async, MinIO/S3,
 OpenCV, YOLOv11, MediaPipe, ByteTrack, SciPy DTW
-
-**AI Coaching:** OpenAI SDK (provider-agnostic), 4 specialized agents,
-deterministic fallback mode
 
 **Infra:** Docker Compose (API, worker, Postgres, Redis, MinIO)
 
