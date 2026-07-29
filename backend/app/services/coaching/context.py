@@ -70,6 +70,7 @@ class ObservationContext:
     occlusion_events: int = 0
     lost_events: int = 0
     is_group: bool = False
+    expected_dancer_count: int = 1
 
 
 @dataclass
@@ -295,6 +296,7 @@ def _extract_observation(
     tracking: TrackingContext,
     *,
     is_group: bool,
+    expected_dancer_count: int,
 ) -> ObservationContext:
     return ObservationContext(
         total_frames=detection.total_frames,
@@ -306,6 +308,7 @@ def _extract_observation(
         occlusion_events=tracking.occlusion_events,
         lost_events=tracking.lost_events,
         is_group=is_group,
+        expected_dancer_count=expected_dancer_count,
     )
 
 
@@ -501,6 +504,7 @@ def extract_coaching_context(
     result: dict,
     mode: str,
     is_group: bool = False,
+    expected_dancer_count: int = 1,
 ) -> CoachingContext:
     """Single extraction function. Both LLM and deterministic paths use this."""
     coached_result = _analysis_result(result, mode)
@@ -511,7 +515,12 @@ def extract_coaching_context(
     tracking = _extract_tracking(frames)
     calibration = _extract_calibration(frames, projection)
     comparison = _extract_comparison(result, mode)
-    observation = _extract_observation(detection, tracking, is_group=is_group)
+    observation = _extract_observation(
+        detection,
+        tracking,
+        is_group=is_group,
+        expected_dancer_count=expected_dancer_count,
+    )
     timing = _extract_timing(
         result,
         coached_result,

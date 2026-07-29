@@ -85,15 +85,20 @@ def _observation_agent(ctx: ObservationContext) -> CoachPhase:
         )
         suggestions.append("Keep heads and feet inside the frame and reduce dancer overlap.")
 
-    if ctx.is_group and ctx.max_persons_per_frame < 2:
+    if ctx.is_group and ctx.max_persons_per_frame < ctx.expected_dancer_count:
+        missing_count = ctx.expected_dancer_count - ctx.max_persons_per_frame
         issues.append(
             CoachIssue(
-                description="This was marked as group choreography, but fewer than two dancers were visible together.",
+                description=(
+                    f"Expected {ctx.expected_dancer_count} dancers, but only "
+                    f"{ctx.max_persons_per_frame} were visible together "
+                    f"({missing_count} missing)."
+                ),
                 severity="high",
                 category="group_visibility",
             )
         )
-        suggestions.append("Reframe the camera so at least two dancers remain visible together.")
+        suggestions.append("Reframe the camera so every expected dancer remains visible.")
     elif ctx.is_group:
         strengths.append(f"Observed up to {ctx.max_persons_per_frame} dancers together.")
 

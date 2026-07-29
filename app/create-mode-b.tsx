@@ -25,6 +25,7 @@ import PrimaryButton from "@/components/PrimaryButton";
 import InlineStatus from "@/components/InlineStatus";
 import TipCard from "@/components/TipCard";
 import CalibrationOverlay from "@/components/CalibrationOverlay";
+import DancerCountSelector from "@/components/DancerCountSelector";
 import {
   CalibrationCorners,
   DEFAULT_CALIBRATION_CORNERS,
@@ -37,6 +38,7 @@ export default function CreateModeBScreen() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [isGroup, setIsGroup] = useState(false);
+  const [expectedDancerCount, setExpectedDancerCount] = useState(3);
   const [referenceReady, setReferenceReady] = useState(false);
   const [referenceVideoUri, setReferenceVideoUri] = useState<string | undefined>();
   const [attemptReady, setAttemptReady] = useState(false);
@@ -133,7 +135,7 @@ export default function CreateModeBScreen() {
       attemptVideoUri,
       referenceVideoUri,
       calibrationCorners,
-    });
+    }, expectedDancerCount);
     router.dismissAll();
     setTimeout(() => {
       store.setPresentedSession(session);
@@ -200,6 +202,12 @@ export default function CreateModeBScreen() {
                     trackColor={{ false: "#DAD6CC", true: "#FF5C5C" }}
                   />
                 </View>
+                {isGroup && (
+                  <DancerCountSelector
+                    value={expectedDancerCount}
+                    onChange={setExpectedDancerCount}
+                  />
+                )}
               </View>
               <Pressable onPress={() => {
                 logger.ui.press("Choose reference video (Mode B)");

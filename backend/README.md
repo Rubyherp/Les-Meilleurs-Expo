@@ -96,9 +96,14 @@ Copy `.env.example` to `.env` and adjust:
 ## Coaching
 
 Coaching analysis can be triggered via `POST /sessions/{session_id}/coach` and
-retrieved via `GET /sessions/{session_id}/coach`. It produces a four-phase
-analysis report (detection, tracking, calibration, comparison) with strengths,
-issues, and suggestions per phase.
+retrieved via `GET /sessions/{session_id}/coach`. Pass `is_group` and
+`expected_dancer_count` in the POST body. Solo sessions run the Observation and
+Timing specialists; group sessions also run Formation. Each specialist returns
+strengths, issues, suggestions, confidence, and availability.
+
+```json
+{"is_group": true, "expected_dancer_count": 4}
+```
 
 By default, coaching uses deterministic analysis (no API calls). To enable
 LLM-powered coaching with richer insights, set the following environment
@@ -109,7 +114,7 @@ variables:
 - `LLM_MODEL` — the model to use (default: `gpt-4o-mini`).
 - `LLM_TEMPERATURE` — response creativity (default: `0.3`).
 
-The LLM integration is optional—every phase can fall back to deterministic
+The LLM integration is optional—every specialist can fall back to deterministic
 analysis independently, so a missing key or a failed API call never prevents
 report generation.
 

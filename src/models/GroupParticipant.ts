@@ -11,10 +11,13 @@ export interface GroupParticipant {
   role: ParticipantRole;
 }
 
-export function createGroupParticipants(): GroupParticipant[] {
-  return [
-    { id: randomUUID(), displayName: "You", role: ParticipantRole.Dancer },
-    { id: randomUUID(), displayName: "Maya", role: ParticipantRole.Dancer },
-    { id: randomUUID(), displayName: "Noah", role: ParticipantRole.Dancer },
-  ];
+const DEFAULT_NAMES = ["You", "Maya", "Noah", "Ari", "Sam", "Kai", "Jules", "Remy"];
+
+export function createGroupParticipants(count = 3): GroupParticipant[] {
+  const normalizedCount = Math.max(2, Math.min(8, Math.round(count)));
+  return Array.from({ length: normalizedCount }, (_, index) => ({
+    id: randomUUID(),
+    displayName: DEFAULT_NAMES[index] ?? `Dancer ${index + 1}`,
+    role: ParticipantRole.Dancer,
+  }));
 }

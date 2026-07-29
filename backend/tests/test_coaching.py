@@ -248,6 +248,7 @@ def test_observation_agent_warns_when_group_has_fewer_than_two_dancers():
             frames_with_poses=9,
             max_persons_per_frame=1,
             is_group=True,
+            expected_dancer_count=2,
         )
     )
     assert any(issue.category == "group_visibility" for issue in agent.issues)

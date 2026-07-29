@@ -188,7 +188,7 @@ button, or programmatically:
 ```sh
 curl -s -X POST "http://localhost:8000/api/v1/sessions/$SESSION_ID/coach" \
   -H "Content-Type: application/json" \
-  -d '{"is_group":true}' | jq .
+  -d '{"is_group":true,"expected_dancer_count":4}' | jq .
 curl -s "http://localhost:8000/api/v1/sessions/$SESSION_ID/coach" | jq .report.phases
 ```
 

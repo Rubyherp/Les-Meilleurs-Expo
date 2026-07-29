@@ -339,6 +339,7 @@ async def request_coaching(
         mode,
         result.result_metadata,
         is_group=payload.is_group if payload else False,
+        expected_dancer_count=payload.expected_dancer_count if payload else 1,
     )
     
     # Store report back in result_metadata for GET caching

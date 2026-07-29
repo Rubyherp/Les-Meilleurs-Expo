@@ -82,7 +82,9 @@ def _format_context_for_llm(agent_num: int, ctx: CoachingContext) -> str:
             f"Observation: group={observation.is_group}, "
             f"visible_frames={observation.frames_with_detections}/{observation.total_frames}, "
             f"pose_frames={observation.frames_with_poses}/{observation.total_frames}, "
-            f"max_people={observation.max_persons_per_frame}, tracks={observation.total_tracks}, "
+            f"max_people={observation.max_persons_per_frame}, "
+            f"expected_people={observation.expected_dancer_count}, "
+            f"tracks={observation.total_tracks}, "
             f"occlusions={observation.occlusion_events}, lost={observation.lost_events}."
         )
     if agent_num == 2:
@@ -131,9 +133,15 @@ async def run_coaching(
     result: dict,
     *,
     is_group: bool = False,
+    expected_dancer_count: int = 1,
 ) -> CoachingReport:
     """Run the applicable specialists through the existing AI coach."""
-    ctx = extract_coaching_context(result, mode, is_group=is_group)
+    ctx = extract_coaching_context(
+        result,
+        mode,
+        is_group=is_group,
+        expected_dancer_count=expected_dancer_count,
+    )
     provider = create_provider()
 
     if not provider.available:

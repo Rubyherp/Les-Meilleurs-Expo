@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 class CoachingRequest(BaseModel):
     is_group: bool = False
+    expected_dancer_count: int = Field(default=1, ge=1, le=8)
 
 
 class CoachIssue(BaseModel):
