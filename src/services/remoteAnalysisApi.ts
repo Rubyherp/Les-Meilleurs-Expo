@@ -92,13 +92,14 @@ function joinUrl(baseUrl: string, path: string): string {
 
 async function request<T>(path: string, init: RequestInit = {}, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
   const method = (init.method ?? "GET").toUpperCase();
-  logger.api.request(method, path);
   const startedAt = Date.now();
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(joinUrl(requireBaseUrl(), path), {
+    const url = joinUrl(requireBaseUrl(), path);
+    logger.api.request(method, url);
+    const response = await fetch(url, {
       ...init,
       signal: controller.signal,
       headers: {
@@ -114,6 +115,11 @@ async function request<T>(path: string, init: RequestInit = {}, timeoutMs = REQU
           ? String((body as { detail?: unknown }).detail)
           : `Request failed with HTTP ${response.status}.`;
       throw new RemoteAnalysisError(detail, response.status);
+    }
+    if (body === undefined || body === null) {
+      throw new RemoteAnalysisError(
+        `The server returned HTTP ${response.status} but the response body was empty or not valid JSON.`
+      );
     }
     return body as T;
   } catch (error) {
