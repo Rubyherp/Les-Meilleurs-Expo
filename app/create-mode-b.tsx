@@ -38,7 +38,7 @@ export default function CreateModeBScreen() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [isGroup, setIsGroup] = useState(false);
-  const [expectedDancerCount, setExpectedDancerCount] = useState(3);
+  const [expectedDancerCount, setExpectedDancerCount] = useState(2);
   const [referenceReady, setReferenceReady] = useState(false);
   const [referenceVideoUri, setReferenceVideoUri] = useState<string | undefined>();
   const [attemptReady, setAttemptReady] = useState(false);

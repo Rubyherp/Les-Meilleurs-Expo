@@ -29,7 +29,7 @@ export function createDanceSession(
   isGroup: boolean,
   duration = 24,
   participantIDs?: string[],
-  expectedDancerCount = isGroup ? 3 : 1
+  expectedDancerCount = isGroup ? 2 : 1
 ): DanceSession {
   const normalizedDancerCount = isGroup
     ? Math.max(2, Math.min(8, Math.round(expectedDancerCount)))

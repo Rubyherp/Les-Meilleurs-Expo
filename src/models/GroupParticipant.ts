@@ -13,7 +13,7 @@ export interface GroupParticipant {
 
 const DEFAULT_NAMES = ["You", "Maya", "Noah", "Ari", "Sam", "Kai", "Jules", "Remy"];
 
-export function createGroupParticipants(count = 3): GroupParticipant[] {
+export function createGroupParticipants(count = 2): GroupParticipant[] {
   const normalizedCount = Math.max(2, Math.min(8, Math.round(count)));
   return Array.from({ length: normalizedCount }, (_, index) => ({
     id: randomUUID(),

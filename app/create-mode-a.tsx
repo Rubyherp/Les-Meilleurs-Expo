@@ -25,7 +25,7 @@ export default function CreateModeAScreen() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [isGroup, setIsGroup] = useState(false);
-  const [expectedDancerCount, setExpectedDancerCount] = useState(3);
+  const [expectedDancerCount, setExpectedDancerCount] = useState(2);
   const [videoUri, setVideoUri] = useState<string | undefined>();
   const [videoSource, setVideoSource] = useState<"recorded" | "library" | undefined>();
   const [calibrationCorners, setCalibrationCorners] = useState<CalibrationCorners>(
