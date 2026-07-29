@@ -62,8 +62,10 @@ export default function CoachFeedbackView({ coachResponse, loading, error, onTri
     return (
       <Pressable onPress={onTrigger} className="rounded-2xl border border-lesCoral/30 bg-[#FF5C5C]/5 p-4 items-center gap-2">
         <Ionicons name="sparkles-outline" size={24} color="#FF5C5C" />
-        <Text className="text-sm font-semibold text-lesCoral">Get AI Coaching</Text>
-        <Text className="text-xs text-lesMuted text-center">Generate insights across all analysis phases.</Text>
+        <Text className="text-sm font-semibold text-lesCoral">Run coaching agents</Text>
+        <Text className="text-xs text-lesMuted text-center">
+          Observation and timing for solo; formation joins for groups.
+        </Text>
       </Pressable>
     );
   }
@@ -99,7 +101,9 @@ export default function CoachFeedbackView({ coachResponse, loading, error, onTri
       <View className="rounded-[26px] bg-lesInk p-5 gap-2">
         <View className="flex-row items-center gap-2">
           <Ionicons name="sparkles" size={16} color="#C8F36A" />
-          <Text className="text-sm font-bold text-white">AI Coaching Report</Text>
+          <Text className="text-sm font-bold text-white">
+            {report.practiceType === "group" ? "Group coaching team" : "Solo coaching team"}
+          </Text>
         </View>
         <Text className="text-sm text-lesMuted leading-5">{report.overallSummary}</Text>
       </View>

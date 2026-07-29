@@ -53,7 +53,10 @@ export default function AnalysisScreen() {
     setCoachError(null);
     try {
       const backendId = session.remoteSessionID;
-      const result = await triggerCoach(backendId);
+      const result = await triggerCoach(
+        backendId,
+        session.participantIDs.length >= 2
+      );
       if (result.status === "completed") {
         setCoachResponse(result);
       } else {
@@ -66,7 +69,7 @@ export default function AnalysisScreen() {
     } finally {
       setCoachLoading(false);
     }
-  }, [sessionId, session?.remoteSessionID]);
+  }, [sessionId, session?.remoteSessionID, session?.participantIDs.length]);
 
   const runAnalysis = useCallback(async (isRetry = false) => {
     if (

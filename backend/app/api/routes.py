@@ -26,7 +26,7 @@ from app.schemas.session import (
     UploadResponse,
 )
 from app.services.storage import Storage
-from app.schemas.coaching import CoachingReport, CoachingResponse
+from app.schemas.coaching import CoachingReport, CoachingRequest, CoachingResponse
 from app.services.coaching.orchestrator import run_coaching
 from app.services.tasks import TaskDispatcher
 from app.services.uploads import UploadValidationError, validate_and_buffer_upload
@@ -308,7 +308,11 @@ async def get_task_status(task_id: UUID, db: AsyncSession = Depends(get_db)) -> 
 
 
 @router.post("/sessions/{session_id}/coach", response_model=CoachingResponse)
-async def request_coaching(session_id: UUID, db: AsyncSession = Depends(get_db)) -> CoachingResponse:
+async def request_coaching(
+    session_id: UUID,
+    payload: CoachingRequest | None = None,
+    db: AsyncSession = Depends(get_db),
+) -> CoachingResponse:
     session = await db.get(AnalysisSession, session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found.")
@@ -330,7 +334,12 @@ async def request_coaching(session_id: UUID, db: AsyncSession = Depends(get_db))
     result, job = row
     
     mode = job.mode if job.mode else "single"
-    report = await run_coaching(session_id, mode, result.result_metadata)
+    report = await run_coaching(
+        session_id,
+        mode,
+        result.result_metadata,
+        is_group=payload.is_group if payload else False,
+    )
     
     # Store report back in result_metadata for GET caching
     result.result_metadata["coaching_report"] = report.model_dump(mode="json")

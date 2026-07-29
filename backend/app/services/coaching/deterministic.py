@@ -1,4 +1,4 @@
-"""Pure-function deterministic report generation for all four analysis phases."""
+"""Pure-function deterministic reports for the coaching specialists."""
 
 from __future__ import annotations
 
@@ -11,10 +11,18 @@ from app.services.coaching.context import (
     CoachingContext,
     ComparisonContext,
     DetectionContext,
+    FormationContext,
+    ObservationContext,
+    TimingContext,
     TrackingContext,
 )
 
-__all__ = ["generate_deterministic_report"]
+__all__ = [
+    "generate_deterministic_report",
+    "_observation_agent",
+    "_timing_agent",
+    "_formation_agent",
+]
 
 
 _PHASE_NAMES: dict[int, str] = {
@@ -23,6 +31,305 @@ _PHASE_NAMES: dict[int, str] = {
     4: "Space Usage",
     5: "Performance Match",
 }
+
+_AGENT_NAMES: dict[int, str] = {
+    1: "Observation Agent",
+    2: "Timing Agent",
+    3: "Formation Agent",
+}
+
+
+def _observation_agent(ctx: ObservationContext) -> CoachPhase:
+    if ctx.total_frames == 0:
+        return CoachPhase(
+            phase=1,
+            name=_AGENT_NAMES[1],
+            available=False,
+            source="deterministic",
+            summary="There were no sampled frames for the observation agent to inspect.",
+            issues=[CoachIssue(description="No visual observations were available.")],
+            suggestions=["Record another take with the dancers fully visible."],
+            confidence=0.0,
+        )
+
+    detection_coverage = ctx.frames_with_detections / max(1, ctx.total_frames)
+    pose_coverage = ctx.frames_with_poses / max(1, ctx.total_frames)
+    observation_slots = ctx.total_frames * max(1, ctx.max_concurrent_tracks)
+    occlusion_rate = ctx.occlusion_events / max(1, observation_slots)
+    loss_rate = ctx.lost_events / max(1, observation_slots)
+    strengths: list[str] = []
+    issues: list[CoachIssue] = []
+    suggestions: list[str] = []
+
+    if detection_coverage >= 0.85:
+        strengths.append(f"Dancers stayed visible in {detection_coverage:.0%} of sampled moments.")
+    elif detection_coverage < 0.6:
+        issues.append(
+            CoachIssue(
+                description=f"Camera visibility dropped to {detection_coverage:.0%}.",
+                severity="high",
+                category="visibility",
+            )
+        )
+        suggestions.append("Use a wider, steadier camera angle with even lighting.")
+
+    if pose_coverage >= 0.75:
+        strengths.append(f"Body movement was readable in {pose_coverage:.0%} of sampled moments.")
+    elif pose_coverage < 0.4:
+        issues.append(
+            CoachIssue(
+                description=f"Full-body movement was readable in only {pose_coverage:.0%} of moments.",
+                severity="medium",
+                category="pose",
+            )
+        )
+        suggestions.append("Keep heads and feet inside the frame and reduce dancer overlap.")
+
+    if ctx.is_group and ctx.max_persons_per_frame < 2:
+        issues.append(
+            CoachIssue(
+                description="This was marked as group choreography, but fewer than two dancers were visible together.",
+                severity="high",
+                category="group_visibility",
+            )
+        )
+        suggestions.append("Reframe the camera so at least two dancers remain visible together.")
+    elif ctx.is_group:
+        strengths.append(f"Observed up to {ctx.max_persons_per_frame} dancers together.")
+
+    if occlusion_rate > 0.25:
+        issues.append(
+            CoachIssue(
+                description=f"Dancers overlapped in {occlusion_rate:.0%} of tracked observations.",
+                severity="medium",
+                category="occlusion",
+            )
+        )
+        suggestions.append("Raise or widen the camera angle to reduce dancers blocking one another.")
+
+    if loss_rate > 0.1:
+        issues.append(
+            CoachIssue(
+                description=f"Tracking was lost in {loss_rate:.0%} of observations.",
+                severity="high" if loss_rate > 0.2 else "medium",
+                category="tracking",
+            )
+        )
+        suggestions.append("Keep lighting and camera position stable throughout the take.")
+
+    if not issues:
+        suggestions.append("Observation quality is strong enough for dependable coaching feedback.")
+
+    confidence = (
+        0.45 * detection_coverage
+        + 0.35 * pose_coverage
+        + 0.2 * max(0.0, 1.0 - min(1.0, occlusion_rate + loss_rate))
+    )
+    return CoachPhase(
+        phase=1,
+        name=_AGENT_NAMES[1],
+        available=True,
+        source="deterministic",
+        summary=(
+            f"Visibility {detection_coverage:.0%}, body-read coverage {pose_coverage:.0%}, "
+            f"with up to {ctx.max_persons_per_frame} dancer(s) visible together."
+        ),
+        strengths=strengths,
+        issues=issues,
+        suggestions=suggestions,
+        confidence=round(max(0.0, min(1.0, confidence)), 2),
+    )
+
+
+def _timing_agent(ctx: TimingContext) -> CoachPhase:
+    if not ctx.available:
+        return CoachPhase(
+            phase=2,
+            name=_AGENT_NAMES[2],
+            available=False,
+            source="deterministic",
+            summary="There was not enough continuous movement data to estimate timing.",
+            issues=[CoachIssue(description="Timing needs a longer stretch of visible movement.")],
+            suggestions=["Record a longer take with continuous full-body visibility."],
+            confidence=0.0,
+        )
+
+    strengths: list[str] = []
+    issues: list[CoachIssue] = []
+    suggestions: list[str] = []
+
+    if ctx.has_reference:
+        offset = ctx.average_offset_seconds
+        absolute_offset = ctx.average_absolute_offset_seconds
+        if absolute_offset <= 0.12:
+            strengths.append("Movement checkpoints stayed closely aligned with the reference.")
+        elif absolute_offset >= 0.35:
+            direction = "behind" if offset > 0.08 else "ahead of" if offset < -0.08 else "around"
+            issues.append(
+                CoachIssue(
+                    description=f"Movement landed about {absolute_offset:.2f}s {direction} the reference.",
+                    severity="high",
+                    category="timing_offset",
+                )
+            )
+            suggestions.append("Rehearse at reduced speed, then return to full tempo.")
+        else:
+            direction = "late" if offset > 0.08 else "early" if offset < -0.08 else "variable"
+            issues.append(
+                CoachIssue(
+                    description=f"Timing was {direction}, averaging {absolute_offset:.2f}s from the reference.",
+                    severity="medium",
+                    category="timing_offset",
+                )
+            )
+            suggestions.append("Mark the main movement accents and aim to land each one with the reference.")
+
+        if ctx.offset_spread_seconds <= 0.15:
+            strengths.append("Timing stayed consistent across the analysed sequence.")
+        elif ctx.offset_spread_seconds > 0.35:
+            issues.append(
+                CoachIssue(
+                    description=f"Timing varied by about {ctx.offset_spread_seconds:.2f}s across the routine.",
+                    severity="medium",
+                    category="timing_consistency",
+                )
+            )
+            suggestions.append("Loop the least consistent phrase before running the full take.")
+    else:
+        if ctx.pulse_consistency >= 0.7:
+            strengths.append("Movement accents repeated at a steady pace.")
+        elif ctx.pulse_consistency < 0.45:
+            issues.append(
+                CoachIssue(
+                    description="Movement accents varied noticeably in pace.",
+                    severity="medium",
+                    category="pulse_consistency",
+                )
+            )
+            suggestions.append("Practice with a count or metronome to make movement accents more even.")
+        else:
+            suggestions.append("Add a reference take to measure early and late timing directly.")
+
+    if ctx.group_sync_score is not None:
+        if ctx.group_sync_score >= 0.75:
+            strengths.append("The group changed speed together.")
+        elif ctx.group_sync_score < 0.5:
+            issues.append(
+                CoachIssue(
+                    description="Dancers accelerated and slowed at different moments.",
+                    severity="medium",
+                    category="group_sync",
+                )
+            )
+            suggestions.append("Choose shared count landmarks for starts, stops, and direction changes.")
+
+    confidence = min(1.0, 0.45 + min(ctx.sample_count, 30) / 60)
+    if not ctx.has_reference:
+        confidence = min(confidence, 0.75)
+    return CoachPhase(
+        phase=2,
+        name=_AGENT_NAMES[2],
+        available=True,
+        source="deterministic",
+        summary=(
+            f"Reference timing offset averaged {ctx.average_absolute_offset_seconds:.2f}s."
+            if ctx.has_reference
+            else f"Movement pulse consistency measured {ctx.pulse_consistency:.0%} without a reference."
+        ),
+        strengths=strengths,
+        issues=issues,
+        suggestions=suggestions,
+        confidence=round(confidence, 2),
+    )
+
+
+def _formation_agent(ctx: FormationContext) -> CoachPhase:
+    if not ctx.enabled:
+        return CoachPhase(
+            phase=3,
+            name=_AGENT_NAMES[3],
+            available=False,
+            source="deterministic",
+            summary="Formation coaching is only used for group choreography.",
+            confidence=0.0,
+        )
+    if not ctx.available:
+        return CoachPhase(
+            phase=3,
+            name=_AGENT_NAMES[3],
+            available=False,
+            source="deterministic",
+            summary="Fewer than two dancers had usable floor positions at the same time.",
+            issues=[CoachIssue(description="The group formation could not be measured.")],
+            suggestions=["Keep at least two dancers visible and confirm the floor calibration."],
+            confidence=0.0,
+        )
+
+    strengths: list[str] = []
+    issues: list[CoachIssue] = []
+    suggestions: list[str] = []
+
+    if ctx.spacing_variation <= 0.2:
+        strengths.append("Relative spacing stayed stable as the group moved.")
+    elif ctx.spacing_variation >= 0.45:
+        issues.append(
+            CoachIssue(
+                description=f"Spacing changed substantially across the take ({ctx.spacing_variation:.0%} variation).",
+                severity="high",
+                category="spacing",
+            )
+        )
+        suggestions.append("Assign each dancer a floor landmark and check spacing at every transition.")
+    else:
+        issues.append(
+            CoachIssue(
+                description=f"Group spacing drifted during transitions ({ctx.spacing_variation:.0%} variation).",
+                severity="medium",
+                category="spacing",
+            )
+        )
+        suggestions.append("Freeze at formation checkpoints and correct spacing before continuing.")
+
+    if ctx.close_spacing_rate > 0.2:
+        issues.append(
+            CoachIssue(
+                description=f"Dancers came very close together in {ctx.close_spacing_rate:.0%} of measured pair positions.",
+                severity="medium",
+                category="crowding",
+            )
+        )
+        suggestions.append("Widen the tightest pathway or stagger crossing times.")
+    else:
+        strengths.append("The group generally maintained enough separation.")
+
+    if ctx.reference_match_score is not None:
+        if ctx.reference_match_score >= 0.8:
+            strengths.append("The group's paths closely matched the reference formation.")
+        elif ctx.reference_match_score < 0.5:
+            issues.append(
+                CoachIssue(
+                    description="The group's spatial paths differ substantially from the reference.",
+                    severity="high",
+                    category="formation_match",
+                )
+            )
+            suggestions.append("Compare one formation checkpoint at a time before joining the full sequence.")
+
+    confidence = min(1.0, 0.5 + ctx.observed_group_frames / 40)
+    return CoachPhase(
+        phase=3,
+        name=_AGENT_NAMES[3],
+        available=True,
+        source="deterministic",
+        summary=(
+            f"Tracked {ctx.tracked_dancers} dancers together across {ctx.observed_group_frames} moments; "
+            f"spacing variation was {ctx.spacing_variation:.0%}."
+        ),
+        strengths=strengths,
+        issues=issues,
+        suggestions=suggestions,
+        confidence=round(confidence, 2),
+    )
 
 
 def _detection_phase(ctx: DetectionContext) -> CoachPhase:
@@ -141,7 +448,7 @@ def _tracking_phase(ctx: TrackingContext) -> CoachPhase:
     if occlusion_rate > 0.3:
         issues.append(
             CoachIssue(
-                description=f"Quite a bit of overlapping — dancers overlapped in {occlusion_rate:.0%} of the observed moments.",
+                description=f"Quite a bit of occlusion — dancers overlapped in {occlusion_rate:.0%} of the observed moments.",
                 severity="medium",
                 category="flow",
             )
@@ -196,7 +503,7 @@ def _calibration_phase(ctx: CalibrationContext) -> CoachPhase:
             strengths=[],
             issues=[
                 CoachIssue(
-                    description="Practice space markers haven't been set up yet.",
+                    description="Floor calibration and practice space markers haven't been set up yet.",
                     severity="high",
                     category="space",
                 )
@@ -375,25 +682,34 @@ def _comparison_phase(ctx: ComparisonContext) -> CoachPhase:
 
 
 def generate_deterministic_report(
-    session_id: UUID, mode: str, ctx: CoachingContext
+    session_id: UUID,
+    mode: str,
+    ctx: CoachingContext,
+    *,
+    is_group: bool = False,
 ) -> CoachingReport:
-    """Generate all phase insights deterministically. No LLM needed."""
-    phase_funcs = [
-        _detection_phase(ctx.detection),
-        _tracking_phase(ctx.tracking),
-        _calibration_phase(ctx.calibration),
-        _comparison_phase(ctx.comparison),
+    """Generate specialist-agent insights deterministically. No LLM needed."""
+    agents = [
+        _observation_agent(ctx.observation),
+        _timing_agent(ctx.timing),
     ]
+    if is_group:
+        agents.append(_formation_agent(ctx.formation))
 
-    summaries = [p.summary for p in phase_funcs]
-    overall = f"Here's your coaching breakdown. " + " ".join(summaries)
+    available_summaries = [agent.summary for agent in agents if agent.available]
+    practice_label = "Group" if is_group else "Solo"
+    overall = (
+        f"{practice_label} coaching team report. "
+        + " ".join(available_summaries)
+    )
 
     return CoachingReport(
         session_id=session_id,
-        report_version=1,
+        report_version=2,
         mode=mode,
+        practice_type="group" if is_group else "solo",
         overall_summary=overall,
-        phases=phase_funcs,
+        phases=agents,
         generated_at=datetime.now(timezone.utc),
         llm_model_used=None,
     )

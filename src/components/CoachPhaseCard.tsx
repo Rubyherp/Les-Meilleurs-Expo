@@ -7,10 +7,9 @@ interface Props {
 }
 
 const PHASE_COLORS: Record<number, { bg: string; badge: string; accent: string }> = {
-  2: { bg: "bg-green-50", badge: "bg-[#C8F36A]/20", accent: "#C8F36A" },
-  3: { bg: "bg-amber-50", badge: "bg-[#FFB347]/20", accent: "#FFB347" },
-  4: { bg: "bg-blue-50", badge: "bg-[#4A90D9]/20", accent: "#4A90D9" },
-  5: { bg: "bg-red-50", badge: "bg-[#FF5C5C]/20", accent: "#FF5C5C" },
+  1: { bg: "bg-green-50", badge: "bg-[#C8F36A]/20", accent: "#78A520" },
+  2: { bg: "bg-amber-50", badge: "bg-[#FFB347]/20", accent: "#D97706" },
+  3: { bg: "bg-blue-50", badge: "bg-[#4A90D9]/20", accent: "#4A90D9" },
 };
 
 const SEVERITY_COLORS: Record<string, string> = {
@@ -27,7 +26,7 @@ export default function CoachPhaseCard({ phase }: Props) {
       <View className="rounded-2xl border border-lesLine bg-white/40 p-4 gap-2 opacity-60">
         <View className="flex-row items-center gap-2">
           <View className={`rounded-full px-2 py-0.5 ${colors.badge}`}>
-            <Text className="text-xs font-bold" style={{ color: colors.accent }}>Phase {phase.phase}</Text>
+            <Text className="text-xs font-bold" style={{ color: colors.accent }}>Agent {phase.phase}</Text>
           </View>
           <Text className="text-sm font-semibold text-lesMuted">{phase.name}</Text>
         </View>
@@ -42,7 +41,7 @@ export default function CoachPhaseCard({ phase }: Props) {
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center gap-2">
           <View className={`rounded-full px-2 py-0.5 ${colors.badge}`}>
-            <Text className="text-xs font-bold" style={{ color: colors.accent }}>Phase {phase.phase}</Text>
+            <Text className="text-xs font-bold" style={{ color: colors.accent }}>Agent {phase.phase}</Text>
           </View>
           <Text className="text-sm font-semibold text-lesInk">{phase.name}</Text>
         </View>

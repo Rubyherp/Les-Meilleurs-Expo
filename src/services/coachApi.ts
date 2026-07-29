@@ -46,10 +46,17 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
 }
 
-export async function triggerCoach(sessionId: string): Promise<CoachResponse> {
+export async function triggerCoach(
+  sessionId: string,
+  isGroup: boolean
+): Promise<CoachResponse> {
   const json = await request<CoachResponseJson>(
     `/sessions/${encodeURIComponent(sessionId)}/coach`,
-    { method: "POST" }
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_group: isGroup }),
+    }
   );
   return normalizeCoachResponse(json);
 }

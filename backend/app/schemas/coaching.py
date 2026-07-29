@@ -6,6 +6,10 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
+class CoachingRequest(BaseModel):
+    is_group: bool = False
+
+
 class CoachIssue(BaseModel):
     description: str
     severity: str = "medium"  # low | medium | high
@@ -13,9 +17,9 @@ class CoachIssue(BaseModel):
 
 
 class CoachPhase(BaseModel):
-    phase: int  # 2, 3, 4, or 5
-    name: str  # "Detection & Pose" | "Tracking & Continuity" | "Calibration & Space" | "Reference Comparison"
-    available: bool  # False if phase data missing from result
+    phase: int  # Specialist order: 1 Observation, 2 Timing, 3 Formation
+    name: str
+    available: bool
     source: str  # "llm" | "deterministic" | "error"
     summary: str
     strengths: list[str] = []
@@ -26,10 +30,11 @@ class CoachPhase(BaseModel):
 
 class CoachingReport(BaseModel):
     session_id: UUID
-    report_version: int = 1
+    report_version: int = 2
     mode: str  # "single" | "comparison"
+    practice_type: str = "solo"  # "solo" | "group"
     overall_summary: str
-    phases: list[CoachPhase]  # always exactly 4 entries
+    phases: list[CoachPhase]  # 2 for solo; 3 for group
     generated_at: datetime
     llm_model_used: str | None = None
 

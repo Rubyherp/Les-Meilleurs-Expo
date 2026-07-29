@@ -184,8 +184,13 @@ export default function CreateModeBScreen() {
                     logger.ui.input("title", "changed");
                   }}
                 />
-                <View className="flex-row items-center justify-between">
-                  <Text className="text-lesInk">This is a group choreography</Text>
+                <View className="flex-row items-center justify-between rounded-2xl border border-lesLine bg-white/45 px-4 py-3">
+                  <View className="flex-1 gap-0.5 pr-3">
+                    <Text className="text-lesInk">Group choreography (2+ dancers)</Text>
+                    <Text className="text-xs text-lesMuted">
+                      Leave off for solo timing and observation coaching.
+                    </Text>
+                  </View>
                   <Switch
                     value={isGroup}
                     onValueChange={(value) => {

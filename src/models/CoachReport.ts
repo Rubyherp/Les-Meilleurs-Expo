@@ -35,6 +35,7 @@ export interface CoachReportJson {
   session_id: string;
   report_version: number;
   mode: "single" | "comparison";
+  practice_type?: "solo" | "group";
   overall_summary: string;
   phases: CoachPhaseJson[];
   generated_at: string;
@@ -74,6 +75,7 @@ export interface CoachReport {
   sessionId: string;
   reportVersion: number;
   mode: "single" | "comparison";
+  practiceType: "solo" | "group";
   overallSummary: string;
   phases: CoachPhase[];
   generatedAt: string;
@@ -116,6 +118,7 @@ function normalizeCoachReport(json: CoachReportJson): CoachReport {
     sessionId: json.session_id,
     reportVersion: json.report_version,
     mode: json.mode,
+    practiceType: json.practice_type ?? "solo",
     overallSummary: json.overall_summary,
     phases: json.phases.map(normalizeCoachPhase),
     generatedAt: json.generated_at,
