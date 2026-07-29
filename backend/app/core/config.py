@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     allowed_video_content_types: str = (
         "video/mp4,video/quicktime,video/webm,video/x-matroska"
     )
-    sample_fps: float | None = Field(default=None, gt=0)
+    sample_fps: float | None = Field(default=10.0, gt=0)
     frame_stride: int = Field(default=1, ge=1)
     detector_confidence: float = Field(default=0.25, ge=0, le=1)
     max_persons: int = Field(default=5, ge=1)

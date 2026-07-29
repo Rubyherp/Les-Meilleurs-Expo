@@ -1,6 +1,7 @@
 services:
   api:
     build: .
+    image: les-meilleurs-backend:local
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://app:app@postgres:5432/video_analysis
@@ -24,6 +25,7 @@ services:
 
   worker:
     build: .
+    image: les-meilleurs-backend:local
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://app:app@postgres:5432/video_analysis

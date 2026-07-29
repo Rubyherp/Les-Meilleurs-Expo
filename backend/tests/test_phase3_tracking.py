@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -156,6 +157,27 @@ def test_ultralytics_adapter_uses_public_track_contract_and_defensive_ids(monkey
     )
     monkeypatch.setattr(adapter, "_load_model", lambda: empty_model)
     assert adapter.track(np.zeros((20, 20, 3), dtype=np.uint8)) == []
+
+
+def test_ultralytics_adapter_reset_keeps_model_and_clears_tracker_state():
+    class FakeTrackerState:
+        def __init__(self):
+            self.reset_count = 0
+
+        def reset(self):
+            self.reset_count += 1
+
+    tracker_state = FakeTrackerState()
+    predictor = SimpleNamespace(trackers=[tracker_state], vid_path=["previous-video"])
+    model = SimpleNamespace(predictor=predictor)
+    adapter = UltralyticsByteTrackAdapter("not-used.pt")
+    adapter._model = model
+
+    adapter.reset()
+
+    assert adapter._model is model
+    assert tracker_state.reset_count == 1
+    assert predictor.vid_path == [None]
 
 
 class FakeDecoder:

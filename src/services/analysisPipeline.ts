@@ -67,8 +67,10 @@ export async function analyzeSession(
       session.calibrationCorners ?? DEFAULT_CALIBRATION_CORNERS
     );
 
-    const refUpload = await uploadReferenceVideo(remoteSession.session_id, session.referenceVideoUri);
-    const attUpload = await uploadAttemptVideoB(remoteSession.session_id, session.attemptVideoUri);
+    const [refUpload, attUpload] = await Promise.all([
+      uploadReferenceVideo(remoteSession.session_id, session.referenceVideoUri),
+      uploadAttemptVideoB(remoteSession.session_id, session.attemptVideoUri),
+    ]);
 
     const comparison = await createComparison(
       remoteSession.session_id,

@@ -1,6 +1,7 @@
 import asyncio
 import shutil
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, BinaryIO, Callable
 from uuid import UUID
@@ -23,6 +24,38 @@ from app.services.tracking import (
 )
 from app.services.video import OpenCVVideoDecoder
 from app.tasks.celery_app import celery_app
+
+
+class ProgressThrottle:
+    """Limit blocking database writes while preserving monotonic progress."""
+
+    def __init__(
+        self,
+        *,
+        initial_progress: int = 0,
+        min_interval_seconds: float = 0.5,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._last_progress = initial_progress
+        self._last_write_at = float("-inf")
+        self._min_interval_seconds = min_interval_seconds
+        self._clock = clock
+
+    def next_progress(self, progress: int) -> int | None:
+        bounded_progress = max(0, min(100, progress))
+        if bounded_progress <= self._last_progress:
+            return None
+
+        now = self._clock()
+        if (
+            bounded_progress < 100
+            and now - self._last_write_at < self._min_interval_seconds
+        ):
+            return None
+
+        self._last_progress = bounded_progress
+        self._last_write_at = now
+        return bounded_progress
 
 
 async def _set_progress(job_id: UUID, status: str, progress: int) -> None:
@@ -156,10 +189,14 @@ async def _process_job(
         storage_service = storage or get_storage(settings)
         factory = pipeline_factory or build_pipeline
         event_loop = asyncio.get_running_loop()
+        progress_throttle = ProgressThrottle(initial_progress=job.progress)
 
         def progress_callback(event: ProgressEvent) -> None:
+            progress = progress_throttle.next_progress(event.progress)
+            if progress is None:
+                return
             future = asyncio.run_coroutine_threadsafe(
-                _set_progress(job_id, "processing", event.progress), event_loop
+                _set_progress(job_id, "processing", progress), event_loop
             )
             future.result()
 
