@@ -18,10 +18,10 @@ __all__ = ["generate_deterministic_report"]
 
 
 _PHASE_NAMES: dict[int, str] = {
-    2: "Detection & Pose",
-    3: "Tracking & Continuity",
-    4: "Calibration & Space",
-    5: "Reference Comparison",
+    2: "Camera & Visibility",
+    3: "Movement Flow",
+    4: "Space Usage",
+    5: "Performance Match",
 }
 
 
@@ -32,8 +32,8 @@ def _detection_phase(ctx: DetectionContext) -> CoachPhase:
             name=_PHASE_NAMES[2],
             available=False,
             source="deterministic",
-            summary="No video frames were sampled. Detection analysis is unavailable.",
-            issues=[CoachIssue(description="No sampled frames found in the analysis result.")],
+            summary="No video frames were sampled. Visibility analysis is unavailable.",
+            issues=[CoachIssue(description="No sampled moments to check visibility.")],
             confidence=0.0,
         )
 
@@ -46,53 +46,51 @@ def _detection_phase(ctx: DetectionContext) -> CoachPhase:
 
     if coverage >= 0.8:
         strengths.append(
-            f"High detection coverage: {ctx.frames_with_detections}/{ctx.total_frames} frames "
+            f"Great camera visibility — you showed up clearly in {ctx.frames_with_detections}/{ctx.total_frames} moments "
             f"({coverage:.0%})"
         )
     elif coverage >= 0.5:
         suggestions.append(
-            f"Detection coverage is {coverage:.0%}. Consider adjusting the camera angle or "
-            "lighting to improve person visibility."
+            f"Camera visibility is at {coverage:.0%}. Try adjusting the camera angle or "
+            "lighting so you're easier to see."
         )
     else:
         issues.append(
             CoachIssue(
-                description=f"Low detection coverage: only {coverage:.0%} of frames have detections.",
+                description=f"Low camera visibility — you were only caught in {coverage:.0%} of the moments.",
                 severity="high",
-                category="detection",
+                category="visibility",
             )
         )
         suggestions.append(
-            "Improve lighting, reduce motion blur, or reposition the camera so dancers are "
-            "clearly visible."
+            "Try brighter lighting, smoother movements, or repositioning the camera so it catches you clearly."
         )
 
     if pose_coverage >= 0.8:
         strengths.append(
-            f"Pose estimation was successful on {ctx.frames_with_poses}/{ctx.total_frames} frames "
+            f"Body recognition worked well — your movement was captured in {ctx.frames_with_poses}/{ctx.total_frames} moments "
             f"({pose_coverage:.0%})"
         )
     elif pose_coverage < 0.3 and ctx.frames_with_detections > 0:
         issues.append(
             CoachIssue(
-                description=f"Low pose coverage: only {pose_coverage:.0%} of frames have pose data.",
+                description=f"Movement data is limited — body recognition worked in only {pose_coverage:.0%} of moments.",
                 severity="medium",
                 category="pose",
             )
         )
         suggestions.append(
-            "Ensure dancers are large enough in the frame and not heavily occluded for "
-            "better pose estimation."
+            "Make sure you're filling enough of the frame and not blocked by anything for better movement capture."
         )
 
     strengths.append(
-        f"Up to {ctx.max_persons_per_frame} person(s) detected in a single frame."
+        f"Up to {ctx.max_persons_per_frame} dancer(s) spotted at once."
     )
 
     summary = (
-        f"Detected persons in {ctx.frames_with_detections}/{ctx.total_frames} sampled frames "
-        f"({coverage:.0%} coverage) with up to {ctx.max_persons_per_frame} concurrent person(s). "
-        f"Pose data available in {ctx.frames_with_poses}/{ctx.total_frames} frames "
+        f"You were clearly visible in {ctx.frames_with_detections} out of {ctx.total_frames} sampled moments "
+        f"({coverage:.0%}), with up to {ctx.max_persons_per_frame} dancer(s) at a time. "
+        f"Movement data captured in {ctx.frames_with_poses}/{ctx.total_frames} moments "
         f"({pose_coverage:.0%})."
     )
 
@@ -116,8 +114,8 @@ def _tracking_phase(ctx: TrackingContext) -> CoachPhase:
             name=_PHASE_NAMES[3],
             available=False,
             source="deterministic",
-            summary="No tracking data available because no frames were sampled.",
-            issues=[CoachIssue(description="No sampled frames found.")],
+            summary="No movement following data available because no frames were sampled.",
+            issues=[CoachIssue(description="No sampled moments to analyse.")],
             confidence=0.0,
         )
 
@@ -131,49 +129,47 @@ def _tracking_phase(ctx: TrackingContext) -> CoachPhase:
     loss_rate = ctx.lost_events / max(1, total_track_observations)
 
     if ctx.total_tracks <= 1:
-        strengths.append("No identity switches detected — single-track scenario.")
+        strengths.append("No who-is-who confusion — just one dancer throughout.")
     else:
-        strengths.append(f"Tracked {ctx.total_tracks} unique dancer identities across the video.")
+        strengths.append(f"Followed {ctx.total_tracks} unique dancer(s) across the routine.")
 
     if ctx.max_concurrent_tracks >= 1:
         strengths.append(
-            f"Up to {ctx.max_concurrent_tracks} dancers tracked simultaneously."
+            f"Up to {ctx.max_concurrent_tracks} dancers followed at the same time."
         )
 
     if occlusion_rate > 0.3:
         issues.append(
             CoachIssue(
-                description=f"High occlusion rate ({occlusion_rate:.0%} of track observations).",
+                description=f"Quite a bit of overlapping — dancers overlapped in {occlusion_rate:.0%} of the observed moments.",
                 severity="medium",
-                category="tracking",
+                category="flow",
             )
         )
         suggestions.append(
-            "Consider a wider camera angle or elevated position to reduce dancer overlap "
-            "and occlusions."
+            "Try a wider camera angle or a higher viewpoint so dancers overlap less."
         )
 
     if loss_rate > 0.1:
         issues.append(
             CoachIssue(
-                description=f"Track loss detected in {ctx.lost_events} event(s).",
+                description=f"Lost track of you in {ctx.lost_events} moment(s).",
                 severity="high" if loss_rate > 0.2 else "medium",
-                category="tracking",
+                category="flow",
             )
         )
         suggestions.append(
-            "Ensure consistent lighting and avoid long occlusions. Track loss may cause "
-            "identity fragmentation."
+            "Keep lighting even and avoid long overlaps — losing track can confuse who is who."
         )
 
     if not issues:
         suggestions.append(
-            "Tracking continuity is good. No major occlusions or losses detected."
+            "Movement following stayed smooth. No major overlaps or lost moments detected."
         )
 
     summary = (
-        f"{ctx.total_tracks} unique track(s) with up to {ctx.max_concurrent_tracks} concurrent "
-        f"dancer(s). Occlusion rate: {occlusion_rate:.0%}, loss rate: {loss_rate:.0%}."
+        f"Followed {ctx.total_tracks} dancer(s) with up to {ctx.max_concurrent_tracks} at once. "
+        f"Overlap rate: {occlusion_rate:.0%}, lost-track rate: {loss_rate:.0%}."
     )
 
     return CoachPhase(
@@ -196,19 +192,17 @@ def _calibration_phase(ctx: CalibrationContext) -> CoachPhase:
             name=_PHASE_NAMES[4],
             available=True,
             source="deterministic",
-            summary="No calibration data was configured for this session. Spatial analysis "
-            "is not available.",
+            summary="No practice space markers were set up for this session. Space analysis is not available.",
             strengths=[],
             issues=[
                 CoachIssue(
-                    description="Calibration points have not been set.",
+                    description="Practice space markers haven't been set up yet.",
                     severity="high",
-                    category="calibration",
+                    category="space",
                 )
             ],
             suggestions=[
-                "Set calibration points via the /calibration endpoint with four normalized "
-                "image coordinates to enable top-down spatial analysis."
+                "Set space markers via the setup tool using four points on the floor to map out your practice area."
             ],
             confidence=0.0,
         )
@@ -219,48 +213,48 @@ def _calibration_phase(ctx: CalibrationContext) -> CoachPhase:
     projection_coverage = ctx.frames_with_projection / max(1, ctx.total_frames)
 
     strengths.append(
-        f"Calibration is configured with a {ctx.grid_columns}x{ctx.grid_rows} grid."
+        f"Practice space is set up with a {ctx.grid_columns}x{ctx.grid_rows} practice grid."
     )
 
     if ctx.tracked_dancers > 0:
         strengths.append(
-            f"Tracking {ctx.tracked_dancers} dancer(s) in the calibrated space."
+            f"Following {ctx.tracked_dancers} dancer(s) in the mapped practice space."
         )
         if projection_coverage >= 0.7:
             strengths.append(
-                f"Good top-down projection coverage: {projection_coverage:.0%} of frames."
+                f"Good floor mapping coverage — your position was mapped in {projection_coverage:.0%} of moments."
             )
         elif projection_coverage < 0.3:
             issues.append(
                 CoachIssue(
-                    description=f"Low projection coverage ({projection_coverage:.0%}).",
+                    description=f"Low floor mapping coverage — only {projection_coverage:.0%} of moments were mapped to the floor.",
                     severity="medium",
-                    category="calibration",
+                    category="space",
                 )
             )
             suggestions.append(
-                "Ensure dancers remain within the calibrated area to maintain projection."
+                "Try to stay within the marked practice area so your movement path can be fully mapped."
             )
 
         strengths.append(
-            f"Average trajectory length: {ctx.avg_trajectory_length:.1f} frames."
+            f"Average movement path length: {ctx.avg_trajectory_length:.1f} moments."
         )
     else:
         issues.append(
             CoachIssue(
-                description="No dancers were tracked in the calibrated space.",
+                description="No dancers were followed in the practice space.",
                 severity="medium",
-                category="calibration",
+                category="space",
             )
         )
         suggestions.append(
-            "Position dancers within the calibrated area for spatial analysis."
+            "Step into the marked practice area so we can analyse your space usage."
         )
 
     summary = (
-        f"Calibration is {'active' if ctx.has_calibration else 'inactive'}. "
-        f"{ctx.tracked_dancers} dancer(s) tracked in the {ctx.grid_columns}x{ctx.grid_rows} grid "
-        f"space across {ctx.frames_with_projection}/{ctx.total_frames} frames."
+        f"Practice space is {'set up' if ctx.has_calibration else 'not set up'}. "
+        f"{ctx.tracked_dancers} dancer(s) followed in the {ctx.grid_columns}x{ctx.grid_rows} practice grid "
+        f"across {ctx.frames_with_projection}/{ctx.total_frames} moments."
     )
 
     return CoachPhase(
@@ -285,8 +279,8 @@ def _comparison_phase(ctx: ComparisonContext) -> CoachPhase:
             name=_PHASE_NAMES[5],
             available=False,
             source="deterministic",
-            summary="Not applicable (single-video mode). Comparison data is only available "
-            "when running in comparison mode with both a reference and an attempt video.",
+            summary="Not applicable (single-video mode). Performance match data is only available "
+            "with both a reference and an attempt video to compare.",
             confidence=0.0,
         )
 
@@ -297,78 +291,74 @@ def _comparison_phase(ctx: ComparisonContext) -> CoachPhase:
     score = ctx.overall_score
     if score >= 0.8:
         strengths.append(
-            f"Excellent overall similarity score: {score:.2f}. The attempt closely matches "
-            "the reference."
+            f"Excellent match score: {score:.2f}. Your performance closely matches the reference. Great work!"
         )
     elif score < 0.5:
         issues.append(
             CoachIssue(
-                description=f"Low overall similarity score: {score:.2f}.",
+                description=f"Overall match score is a bit low: {score:.2f}.",
                 severity="high",
-                category="comparison",
+                category="match",
             )
         )
         suggestions.append(
-            "Review the alignment details to identify specific frames or dancers with "
-            "large deviations."
+            "Check the comparison details to spot which moments or dancers had the biggest differences."
         )
     else:
         strengths.append(
-            f"Moderate similarity score: {score:.2f}. Some deviations exist."
+            f"Decent match score: {score:.2f}. Some differences from the reference, but you're on the right track."
         )
         suggestions.append(
-            "Focus on the dancers and segments with the highest deviation for targeted "
-            "improvement."
+            "Focus on the dancers and parts with the biggest differences for targeted practice."
         )
 
     if ctx.matched_pairs > 0:
         strengths.append(
-            f"Matched {ctx.matched_pairs} dancer pair(s) between reference and attempt."
+            f"Matched {ctx.matched_pairs} dancer pair(s) between reference and your performance."
         )
         strengths.append(
-            f"Average DTW cost: {ctx.avg_dtw_cost:.4f}, average deviation: "
+            f"Movement similarity score: {ctx.avg_dtw_cost:.4f}, average difference: "
             f"{ctx.avg_deviation:.4f}."
         )
     else:
         issues.append(
             CoachIssue(
-                description="No dancer pairs were matched between reference and attempt.",
+                description="No dancer pairs were matched between the reference and your performance.",
                 severity="high",
-                category="comparison",
+                category="match",
             )
         )
         suggestions.append(
-            "Ensure both videos contain the same dancers and similar choreography."
+            "Make sure both videos contain the same dancers and a similar routine."
         )
 
     if ctx.unmatched_reference > 0 or ctx.unmatched_attempt > 0:
         if ctx.unmatched_reference > 0:
             issues.append(
                 CoachIssue(
-                    description=f"{ctx.unmatched_reference} dancer(s) in the reference were "
-                    "not matched in the attempt.",
+                    description=f"{ctx.unmatched_reference} dancer(s) in the reference "
+                    "couldn't be matched with your performance.",
                     severity="medium",
-                    category="comparison",
+                    category="match",
                 )
             )
         if ctx.unmatched_attempt > 0:
             issues.append(
                 CoachIssue(
-                    description=f"{ctx.unmatched_attempt} dancer(s) in the attempt were "
-                    "not matched in the reference.",
+                    description=f"{ctx.unmatched_attempt} dancer(s) in your performance "
+                    "couldn't be matched with the reference.",
                     severity="medium",
-                    category="comparison",
+                    category="match",
                 )
             )
         suggestions.append(
-            "Verify that the same number of dancers perform in both videos."
+            "Make sure the same number of dancers perform in both videos."
         )
 
     summary = (
-        f"Comparison {'available' if ctx.available else 'not available'} with "
-        f"{ctx.matched_pairs} matched pair(s). "
-        f"Overall score: {score:.4f}. "
-        f"Unmatched: {ctx.unmatched_reference} reference, {ctx.unmatched_attempt} attempt."
+        f"Performance match with {ctx.matched_pairs} paired dancer(s). "
+        f"Overall match score: {score:.4f}. "
+        f"Unmatched: {ctx.unmatched_reference} in reference, {ctx.unmatched_attempt} in your performance."
     )
 
     return CoachPhase(
@@ -396,10 +386,7 @@ def generate_deterministic_report(
     ]
 
     summaries = [p.summary for p in phase_funcs]
-    overall = (
-        f"Deterministic analysis of {mode} session. "
-        + " ".join(summaries)
-    )
+    overall = f"Here's your coaching breakdown. " + " ".join(summaries)
 
     return CoachingReport(
         session_id=session_id,

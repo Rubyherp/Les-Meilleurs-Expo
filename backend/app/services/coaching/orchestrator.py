@@ -8,15 +8,15 @@ from app.services.coaching.context import CoachingContext, extract_coaching_cont
 from app.services.coaching.deterministic import generate_deterministic_report
 from app.services.coaching.provider import create_provider
 
-_PHASE_NAMES = {2: "Detection & Pose", 3: "Tracking & Continuity", 4: "Calibration & Space", 5: "Reference Comparison"}
+_PHASE_NAMES = {2: "Camera & Visibility", 3: "Movement Flow", 4: "Space Usage", 5: "Performance Match"}
 
-_SYSTEM_PROMPT = """You are a dance coaching analyst. Analyse only the provided data.\nReturn a JSON object with: summary (1-2 sentences), strengths (list of strings), issues (list of {description, severity: low|medium|high, category: string|null}), suggestions (list of strings), confidence (float 0-1). Never invent data not present. Base severity on data quality impact."""
+_SYSTEM_PROMPT = """You are a friendly dance coach giving constructive feedback to dancers. Use warm, encouraging, simple language — no technical jargon. Analyse only the provided data.\nReturn a JSON object with: summary (1-2 sentences in plain dancer-friendly language), strengths (list of cheerful strings), issues (list of {description, severity: low|medium|high, category: string|null}), suggestions (list of actionable, supportive tips), confidence (float 0-1). Never invent data not present. Write as if you're talking directly to the dancer."""
 
 _PHASE_PROMPTS = {
-    2: "You are a detection analyst. Focus on person detection coverage and pose estimation quality.",
-    3: "You are a tracking analyst. Focus on identity continuity, occlusion rates, and track loss.",
-    4: "You are a calibration analyst. Focus on top-down projection quality and spatial coverage.",
-    5: "You are a comparison analyst. Focus on reference-vs-attempt similarity scores and deviation patterns.",
+    2: "You are a dance visibility coach. Check if the dancer was clearly seen by the camera throughout the routine.",
+    3: "You are a movement flow coach. Check how smoothly the dancer was followed and tracked across the routine.",
+    4: "You are a space usage coach. Check how well the dancer used the practice space and moved around.",
+    5: "You are a performance match coach. Compare the dancer's routine against the reference and note areas for improvement.",
 }
 
 def _parse_llm_phase(raw: str | None, phase_num: int, ctx) -> CoachPhase:
@@ -114,7 +114,7 @@ async def run_coaching(session_id: UUID, mode: str, result: dict) -> CoachingRep
         phases[3] = _get_deterministic_phase(5, ctx)
     
     summaries = [p.summary for p in phases]
-    overall = f"AI coaching analysis of {mode} session. " + " ".join(summaries)
+    overall = f"Here's your coaching breakdown. " + " ".join(summaries)
     
     return CoachingReport(
         session_id=session_id,
