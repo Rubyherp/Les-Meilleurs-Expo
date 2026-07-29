@@ -121,11 +121,9 @@ export default function AnalysisScreen() {
     logger.phase("initial → preparing");
     safeSetPhase("preparing");
     try {
-      await new Promise((resolve) => setTimeout(resolve, 450));
       if (!mountedRef.current) return;
       logger.phase("preparing → uploading");
       safeSetPhase("uploading");
-      await new Promise((resolve) => setTimeout(resolve, 350));
       if (!mountedRef.current) return;
       logger.phase("uploading → analyzing");
       safeSetPhase("analyzing");

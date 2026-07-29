@@ -1,12 +1,13 @@
 """Application tracking contracts and an Ultralytics ByteTrack adapter.
 
 The application intentionally owns only the lifecycle/occlusion bookkeeping.
-Ultralytics owns the actual ByteTrack association and its state is isolated in
-one adapter instance per video job.
+Ultralytics owns the actual ByteTrack association. Model weights stay cached
+within each worker process while tracker state is reset between videos.
 """
 
 import math
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
@@ -275,16 +276,7 @@ class UltralyticsByteTrackAdapter:
 
     def _load_model(self) -> Any:
         if self._model is None:
-            path = Path(self.weights_path)
-            if not path.is_file():
-                raise ModelAssetError(
-                    f"YOLO weights were not found at {path}. Provision the file and set YOLO_MODEL_PATH."
-                )
-            try:
-                from ultralytics import YOLO
-            except ImportError as exc:  # pragma: no cover - dependency availability
-                raise ModelAssetError("Ultralytics is required for ByteTrack.") from exc
-            self._model = YOLO(str(path))
+            self._model = _load_tracking_model(self.weights_path)
         return self._model
 
     def track(self, frame: Any) -> list[TrackObservation]:
@@ -301,8 +293,15 @@ class UltralyticsByteTrackAdapter:
         return self._parse_result(results, frame.shape[1], frame.shape[0])
 
     def reset(self) -> None:
-        # Dropping the model also drops Ultralytics' internal persisted tracker.
-        self._model = None
+        if self._model is None:
+            return
+        predictor = getattr(self._model, "predictor", None)
+        for tracker in getattr(predictor, "trackers", ()):
+            reset = getattr(tracker, "reset", None)
+            if reset is not None:
+                reset()
+        if predictor is not None and hasattr(predictor, "vid_path"):
+            predictor.vid_path = [None] * len(getattr(predictor, "trackers", ()))
 
     def _parse_result(self, results: Any, width: int, height: int) -> list[TrackObservation]:
         if not results:
@@ -344,6 +343,20 @@ class UltralyticsByteTrackAdapter:
         if hasattr(value, "tolist"):
             value = value.tolist()
         return value
+
+
+@lru_cache(maxsize=4)
+def _load_tracking_model(weights_path: str) -> Any:
+    path = Path(weights_path)
+    if not path.is_file():
+        raise ModelAssetError(
+            f"YOLO weights were not found at {path}. Provision the file and set YOLO_MODEL_PATH."
+        )
+    try:
+        from ultralytics import YOLO
+    except ImportError as exc:  # pragma: no cover - dependency availability
+        raise ModelAssetError("Ultralytics is required for ByteTrack.") from exc
+    return YOLO(str(path))
 
 
 class UltralyticsByteTrack:

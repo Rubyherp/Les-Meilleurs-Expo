@@ -4,14 +4,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 WORKDIR /service
-COPY pyproject.toml README.md ./
-COPY app ./app
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential python3-dev libglib2.0-0 libgl1 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir .
+COPY pyproject.toml ./
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -c "import tomllib; data = tomllib.load(open('pyproject.toml', 'rb')); print(*data['build-system']['requires'], *data['project']['dependencies'], sep='\n')" \
+    | pip install --requirement /dev/stdin
+
+COPY README.md ./
+COPY app ./app
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-build-isolation --no-deps .
 
 # Model assets are provisioned separately at runtime/build time; they are not
 # bundled in this repository or downloaded implicitly by the application.

@@ -31,6 +31,28 @@ class FakePipeline:
         }
 
 
+def test_progress_throttle_limits_writes_and_never_moves_backwards():
+    now = [0.0]
+    throttle = analysis.ProgressThrottle(
+        initial_progress=5,
+        min_interval_seconds=0.5,
+        clock=lambda: now[0],
+    )
+
+    assert throttle.next_progress(5) is None
+    assert throttle.next_progress(10) == 10
+    assert throttle.next_progress(11) is None
+
+    now[0] = 0.5
+    assert throttle.next_progress(11) == 11
+    assert throttle.next_progress(9) is None
+    assert throttle.next_progress(100) == 100
+
+
+def test_analysis_defaults_to_ten_sampled_frames_per_second():
+    assert Settings(_env_file=None).sample_fps == 10.0
+
+
 def test_task_persists_pipeline_result_and_final_status(tmp_path, monkeypatch):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'task.db'}")
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)

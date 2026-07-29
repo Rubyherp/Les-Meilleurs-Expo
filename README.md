@@ -73,6 +73,10 @@ The API is available at `http://localhost:8000`. Interactive docs at `/docs`.
 Services: API (`:8000`), Celery worker, Postgres (`:5432`), Redis (`:6379`),
 MinIO/S3 (`:9000`, console `:9001`).
 
+Video inference samples at 10 FPS by default. Override `SAMPLE_FPS` in
+`backend/.env` only when a different speed/temporal-resolution tradeoff is
+required.
+
 ### Model assets
 
 Place these two files in `backend/models/` (automatically mounted into the

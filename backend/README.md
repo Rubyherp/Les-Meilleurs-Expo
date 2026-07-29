@@ -77,7 +77,8 @@ Copy `.env.example` to `.env` and adjust:
   `S3_REGION` — MinIO or another S3-compatible service.
 - `MAX_UPLOAD_SIZE_BYTES` and `ALLOWED_VIDEO_CONTENT_TYPES` — upload policy.
 - `SAMPLE_FPS` or `FRAME_STRIDE` — frame sampling policy; target FPS takes
-  precedence when set.
+  precedence when set. `SAMPLE_FPS` defaults to `10` to avoid running detection
+  and pose inference on every source frame.
 - `DETECTOR_CONFIDENCE`, `MAX_PERSONS`, and `CROP_PADDING` — detection and
   per-person pose settings.
 - `YOLO_MODEL_PATH`, `POSE_MODEL_PATH`, and `ML_DEVICE` — explicit model asset
