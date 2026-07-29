@@ -48,16 +48,17 @@ export default function AnalysisScreen() {
     : [];
 
   const requestCoach = useCallback(async () => {
-    if (!sessionId) return;
+    if (!sessionId || !session?.remoteSessionID) return;
     setCoachLoading(true);
     setCoachError(null);
     try {
-      const result = await triggerCoach(sessionId);
+      const backendId = session.remoteSessionID;
+      const result = await triggerCoach(backendId);
       if (result.status === "completed") {
         setCoachResponse(result);
       } else {
         await new Promise((r) => setTimeout(r, 1500));
-        const polled = await getCoachReport(sessionId);
+        const polled = await getCoachReport(backendId);
         setCoachResponse(polled);
       }
     } catch (e) {
@@ -65,7 +66,7 @@ export default function AnalysisScreen() {
     } finally {
       setCoachLoading(false);
     }
-  }, [sessionId]);
+  }, [sessionId, session?.remoteSessionID]);
 
   const runAnalysis = useCallback(async (isRetry = false) => {
     if (
