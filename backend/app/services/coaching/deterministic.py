@@ -5,7 +5,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID
 
-from app.schemas.coaching import CoachIssue, CoachPhase, CoachingReport
+from app.schemas.coaching import (
+    CoachAgent,
+    CoachEvidence,
+    CoachIssue,
+    CoachPhase,
+    CoachingReport,
+)
 from app.services.coaching.context import (
     CalibrationContext,
     CoachingContext,
@@ -22,6 +28,8 @@ __all__ = [
     "_observation_agent",
     "_timing_agent",
     "_formation_agent",
+    "_gated_agent",
+    "observation_allows_specialists",
 ]
 
 
@@ -37,6 +45,33 @@ _AGENT_NAMES: dict[int, str] = {
     2: "Timing Agent",
     3: "Formation Agent",
 }
+
+_OBSERVATION_GATE_THRESHOLD = 0.55
+
+
+def observation_allows_specialists(observation: CoachAgent) -> bool:
+    blocking_categories = {"visibility", "tracking", "group_visibility"}
+    has_blocking_issue = any(
+        issue.severity == "high" and issue.category in blocking_categories
+        for issue in observation.issues
+    )
+    return (
+        observation.available
+        and observation.confidence >= _OBSERVATION_GATE_THRESHOLD
+        and not has_blocking_issue
+    )
+
+
+def _gated_agent(agent_num: int, reason: str) -> CoachPhase:
+    return CoachPhase(
+        phase=agent_num,
+        name=_AGENT_NAMES[agent_num],
+        available=False,
+        source="deterministic",
+        summary=reason,
+        suggestions=["Improve camera visibility, then run the coaching team again."],
+        confidence=0.0,
+    )
 
 
 def _observation_agent(ctx: ObservationContext) -> CoachPhase:
@@ -142,6 +177,23 @@ def _observation_agent(ctx: ObservationContext) -> CoachPhase:
         strengths=strengths,
         issues=issues,
         suggestions=suggestions,
+        evidence=[
+            CoachEvidence(
+                metric="visibility_coverage",
+                value=round(detection_coverage, 3),
+                unit="ratio",
+            ),
+            CoachEvidence(
+                metric="pose_coverage",
+                value=round(pose_coverage, 3),
+                unit="ratio",
+            ),
+            CoachEvidence(
+                metric="max_visible_dancers",
+                value=ctx.max_persons_per_frame,
+                unit="dancers",
+            ),
+        ],
         confidence=round(max(0.0, min(1.0, confidence)), 2),
     )
 
@@ -244,6 +296,39 @@ def _timing_agent(ctx: TimingContext) -> CoachPhase:
         strengths=strengths,
         issues=issues,
         suggestions=suggestions,
+        evidence=(
+            [
+                CoachEvidence(
+                    metric="average_reference_offset",
+                    value=ctx.average_absolute_offset_seconds,
+                    unit="seconds",
+                ),
+                CoachEvidence(
+                    metric="timing_offset_spread",
+                    value=ctx.offset_spread_seconds,
+                    unit="seconds",
+                ),
+            ]
+            if ctx.has_reference
+            else [
+                CoachEvidence(
+                    metric="movement_pulse_consistency",
+                    value=ctx.pulse_consistency,
+                    unit="ratio",
+                )
+            ]
+        )
+        + (
+            [
+                CoachEvidence(
+                    metric="group_sync_score",
+                    value=ctx.group_sync_score,
+                    unit="ratio",
+                )
+            ]
+            if ctx.group_sync_score is not None
+            else []
+        ),
         confidence=round(confidence, 2),
     )
 
@@ -333,6 +418,23 @@ def _formation_agent(ctx: FormationContext) -> CoachPhase:
         strengths=strengths,
         issues=issues,
         suggestions=suggestions,
+        evidence=[
+            CoachEvidence(
+                metric="spacing_variation",
+                value=ctx.spacing_variation,
+                unit="ratio",
+            ),
+            CoachEvidence(
+                metric="close_spacing_rate",
+                value=ctx.close_spacing_rate,
+                unit="ratio",
+            ),
+            CoachEvidence(
+                metric="tracked_dancers",
+                value=ctx.tracked_dancers,
+                unit="dancers",
+            ),
+        ],
         confidence=round(confidence, 2),
     )
 
@@ -694,12 +796,19 @@ def generate_deterministic_report(
     is_group: bool = False,
 ) -> CoachingReport:
     """Generate specialist-agent insights deterministically. No LLM needed."""
-    agents = [
-        _observation_agent(ctx.observation),
-        _timing_agent(ctx.timing),
-    ]
-    if is_group:
-        agents.append(_formation_agent(ctx.formation))
+    observation = _observation_agent(ctx.observation)
+    agents = [observation]
+    coordination_notes: list[str] = []
+    if observation_allows_specialists(observation):
+        agents.append(_timing_agent(ctx.timing))
+        if is_group:
+            agents.append(_formation_agent(ctx.formation))
+    else:
+        reason = "Paused because the Observation Agent could not verify the video reliably."
+        coordination_notes.append(reason)
+        agents.append(_gated_agent(2, reason))
+        if is_group:
+            agents.append(_gated_agent(3, reason))
 
     available_summaries = [agent.summary for agent in agents if agent.available]
     practice_label = "Group" if is_group else "Solo"
@@ -710,11 +819,12 @@ def generate_deterministic_report(
 
     return CoachingReport(
         session_id=session_id,
-        report_version=2,
+        report_version=3,
         mode=mode,
         practice_type="group" if is_group else "solo",
         overall_summary=overall,
-        phases=agents,
+        agents=agents,
+        coordination_notes=coordination_notes,
         generated_at=datetime.now(timezone.utc),
         llm_model_used=None,
     )

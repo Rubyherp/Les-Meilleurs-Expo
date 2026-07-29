@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timezone
 from uuid import UUID
 
-from app.schemas.coaching import CoachIssue, CoachPhase, CoachingReport
+from app.schemas.coaching import CoachAgent, CoachIssue, CoachPhase, CoachingReport
 from app.services.coaching.context import CoachingContext, extract_coaching_context
 from app.services.coaching.deterministic import generate_deterministic_report
 from app.services.coaching.provider import create_provider
@@ -18,19 +18,22 @@ _AGENT_PROMPTS = {
     3: "You are the Formation Agent for group choreography. Judge relative spacing, crowding, and spatial match.",
 }
 
-def _parse_llm_agent(raw: str | None, agent_num: int, ctx) -> CoachPhase:
+def _parse_llm_agent(raw: str | None, agent_num: int, ctx) -> CoachAgent:
     """Parse an LLM specialist response, falling back on any failure."""
+    deterministic = _get_deterministic_agent(agent_num, ctx)
     if not raw:
-        return _get_deterministic_agent(agent_num, ctx)
+        return deterministic
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        return _get_deterministic_agent(agent_num, ctx)
+        return deterministic
     if not isinstance(data, dict):
-        return _get_deterministic_agent(agent_num, ctx)
+        return deterministic
     
-    # Clamp confidence
-    conf = max(0.0, min(1.0, float(data.get("confidence", 0.5))))
+    try:
+        conf = max(0.0, min(1.0, float(data.get("confidence", deterministic.confidence))))
+    except (TypeError, ValueError):
+        return deterministic
     
     return CoachPhase(
         phase=agent_num,
@@ -45,10 +48,11 @@ def _parse_llm_agent(raw: str | None, agent_num: int, ctx) -> CoachPhase:
             category=str(i.get("category")) if i.get("category") else None,
         ) for i in (data.get("issues") or []) if isinstance(i, dict)],
         suggestions=[str(s) for s in (data.get("suggestions") or []) if isinstance(s, str)],
+        evidence=deterministic.evidence,
         confidence=round(conf, 2),
     )
 
-def _get_deterministic_agent(agent_num: int, ctx: CoachingContext) -> CoachPhase:
+def _get_deterministic_agent(agent_num: int, ctx: CoachingContext) -> CoachAgent:
     from app.services.coaching.deterministic import (
         _formation_agent,
         _observation_agent,
@@ -109,7 +113,7 @@ def _format_context_for_llm(agent_num: int, ctx: CoachingContext) -> str:
         )
     return ""
 
-async def _try_llm_agent(provider, agent_num: int, ctx: CoachingContext) -> CoachPhase:
+async def _try_llm_agent(provider, agent_num: int, ctx: CoachingContext) -> CoachAgent:
     """Try an LLM specialist and fall back deterministically on any failure."""
     deterministic = _get_deterministic_agent(agent_num, ctx)
     if not deterministic.available:
@@ -152,23 +156,44 @@ async def run_coaching(
             is_group=is_group,
         )
     
-    agent_numbers = [1, 2, 3] if is_group else [1, 2]
-    phases = list(
-        await asyncio.gather(
-            *[_try_llm_agent(provider, agent_num, ctx) for agent_num in agent_numbers]
-        )
+    from app.services.coaching.deterministic import (
+        _gated_agent,
+        observation_allows_specialists,
     )
-    summaries = [agent.summary for agent in phases if agent.available]
+
+    observation_baseline = _get_deterministic_agent(1, ctx)
+    observation = await _try_llm_agent(provider, 1, ctx)
+    agents = [observation]
+    coordination_notes: list[str] = []
+    if observation_allows_specialists(observation_baseline):
+        remaining_agent_numbers = [2, 3] if is_group else [2]
+        agents.extend(
+            await asyncio.gather(
+                *[
+                    _try_llm_agent(provider, agent_num, ctx)
+                    for agent_num in remaining_agent_numbers
+                ]
+            )
+        )
+    else:
+        reason = "Paused because the Observation Agent could not verify the video reliably."
+        coordination_notes.append(reason)
+        agents.append(_gated_agent(2, reason))
+        if is_group:
+            agents.append(_gated_agent(3, reason))
+
+    summaries = [agent.summary for agent in agents if agent.available]
     practice_label = "Group" if is_group else "Solo"
     overall = f"{practice_label} coaching team report. " + " ".join(summaries)
     
     return CoachingReport(
         session_id=session_id,
-        report_version=2,
+        report_version=3,
         mode=mode,
         practice_type="group" if is_group else "solo",
         overall_summary=overall,
-        phases=phases,
+        agents=agents,
+        coordination_notes=coordination_notes,
         generated_at=datetime.now(timezone.utc),
         llm_model_used=provider.model_name if provider.available else None,
     )

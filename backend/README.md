@@ -99,7 +99,9 @@ Coaching analysis can be triggered via `POST /sessions/{session_id}/coach` and
 retrieved via `GET /sessions/{session_id}/coach`. Pass `is_group` and
 `expected_dancer_count` in the POST body. Solo sessions run the Observation and
 Timing specialists; group sessions also run Formation. Each specialist returns
-strengths, issues, suggestions, confidence, and availability.
+strengths, issues, suggestions, measurement evidence, confidence, and
+availability. If Observation cannot verify the video reliably, the coordinator
+pauses Timing and Formation instead of presenting weak conclusions.
 
 ```json
 {"is_group": true, "expected_dancer_count": 4}

@@ -1,9 +1,9 @@
 import { View, Text } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import type { CoachPhase } from "@/models/CoachReport";
+import type { CoachAgent } from "@/models/CoachReport";
 
 interface Props {
-  phase: CoachPhase;
+  agent: CoachAgent;
 }
 
 const PHASE_COLORS: Record<number, { bg: string; badge: string; accent: string }> = {
@@ -18,19 +18,27 @@ const SEVERITY_COLORS: Record<string, string> = {
   low: "border-l-[#9E9E9E]",
 };
 
-export default function CoachPhaseCard({ phase }: Props) {
-  const colors = PHASE_COLORS[phase.phase] ?? { bg: "bg-gray-50", badge: "bg-gray-200", accent: "#9E9E9E" };
+function formatEvidenceValue(value: number | string, unit: string | null): string {
+  if (typeof value === "number") {
+    if (unit === "ratio") return `${Math.round(value * 100)}%`;
+    if (unit === "seconds") return `${value.toFixed(2)}s`;
+  }
+  return unit && unit !== "ratio" ? `${value} ${unit}` : String(value);
+}
 
-  if (!phase.available) {
+export default function CoachAgentCard({ agent }: Props) {
+  const colors = PHASE_COLORS[agent.agentId] ?? { bg: "bg-gray-50", badge: "bg-gray-200", accent: "#9E9E9E" };
+
+  if (!agent.available) {
     return (
       <View className="rounded-2xl border border-lesLine bg-white/40 p-4 gap-2 opacity-60">
         <View className="flex-row items-center gap-2">
           <View className={`rounded-full px-2 py-0.5 ${colors.badge}`}>
-            <Text className="text-xs font-bold" style={{ color: colors.accent }}>Agent {phase.phase}</Text>
+            <Text className="text-xs font-bold" style={{ color: colors.accent }}>Agent {agent.agentId}</Text>
           </View>
-          <Text className="text-sm font-semibold text-lesMuted">{phase.name}</Text>
+          <Text className="text-sm font-semibold text-lesMuted">{agent.name}</Text>
         </View>
-        <Text className="text-xs text-lesMuted">{phase.summary}</Text>
+        <Text className="text-xs text-lesMuted">{agent.summary}</Text>
       </View>
     );
   }
@@ -41,24 +49,24 @@ export default function CoachPhaseCard({ phase }: Props) {
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center gap-2">
           <View className={`rounded-full px-2 py-0.5 ${colors.badge}`}>
-            <Text className="text-xs font-bold" style={{ color: colors.accent }}>Agent {phase.phase}</Text>
+            <Text className="text-xs font-bold" style={{ color: colors.accent }}>Agent {agent.agentId}</Text>
           </View>
-          <Text className="text-sm font-semibold text-lesInk">{phase.name}</Text>
+          <Text className="text-sm font-semibold text-lesInk">{agent.name}</Text>
         </View>
         <View className="rounded-full bg-lesInk/10 px-2 py-0.5">
           <Text className="text-[10px] font-medium text-lesMuted uppercase">
-            {phase.source === "llm" ? "AI" : phase.source === "error" ? "Error" : "Data-driven"}
+            {agent.source === "llm" ? "AI" : agent.source === "error" ? "Error" : "Data-driven"}
           </Text>
         </View>
       </View>
 
       {/* Summary */}
-      <Text className="text-sm text-lesInk leading-5">{phase.summary}</Text>
+      <Text className="text-sm text-lesInk leading-5">{agent.summary}</Text>
 
       {/* Strengths */}
-      {phase.strengths.length > 0 && (
+      {agent.strengths.length > 0 && (
         <View className="gap-1">
-          {phase.strengths.map((s, i) => (
+          {agent.strengths.map((s, i) => (
             <View key={i} className="flex-row items-start gap-2">
               <Ionicons name="checkmark-circle" size={14} color={colors.accent} style={{ marginTop: 2 }} />
               <Text className="text-xs text-lesInk flex-1">{s}</Text>
@@ -68,9 +76,9 @@ export default function CoachPhaseCard({ phase }: Props) {
       )}
 
       {/* Issues */}
-      {phase.issues.length > 0 && (
+      {agent.issues.length > 0 && (
         <View className="gap-1">
-          {phase.issues.map((issue, i) => (
+          {agent.issues.map((issue, i) => (
             <View key={i} className={`rounded-lg border-l-2 bg-white/50 p-2 ${SEVERITY_COLORS[issue.severity] ?? "border-l-[#9E9E9E]"}`}>
               <View className="flex-row items-center justify-between">
                 <Text className="text-xs font-medium text-lesInk flex-1">{issue.description}</Text>
@@ -84,12 +92,24 @@ export default function CoachPhaseCard({ phase }: Props) {
       )}
 
       {/* Suggestions */}
-      {phase.suggestions.length > 0 && (
+      {agent.suggestions.length > 0 && (
         <View className="gap-1">
-          {phase.suggestions.map((s, i) => (
+          {agent.suggestions.map((s, i) => (
             <View key={i} className="flex-row items-start gap-2">
               <Ionicons name="bulb-outline" size={14} color="#4A90D9" style={{ marginTop: 2 }} />
               <Text className="text-xs text-lesInk flex-1">{s}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {agent.evidence.length > 0 && (
+        <View className="flex-row flex-wrap gap-2 border-t border-lesLine pt-2">
+          {agent.evidence.map((item) => (
+            <View key={item.metric} className="rounded-full bg-lesInk/5 px-2.5 py-1">
+              <Text className="text-[10px] text-lesMuted">
+                {item.metric.replaceAll("_", " ")} · {formatEvidenceValue(item.value, item.unit)}
+              </Text>
             </View>
           ))}
         </View>
@@ -99,7 +119,7 @@ export default function CoachPhaseCard({ phase }: Props) {
       <View className="h-1 rounded-full bg-lesLine overflow-hidden">
         <View 
           className="h-full rounded-full" 
-          style={{ width: `${Math.round(phase.confidence * 100)}%`, backgroundColor: colors.accent }} 
+          style={{ width: `${Math.round(agent.confidence * 100)}%`, backgroundColor: colors.accent }} 
         />
       </View>
     </View>

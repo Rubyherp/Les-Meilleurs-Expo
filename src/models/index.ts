@@ -53,7 +53,8 @@ export {
   normalizePhase5Result,
 } from "./Phase5Result";
 export {
-  type CoachPhase,
+  type CoachAgent,
+  type CoachEvidence,
   type CoachPhaseIssue,
   type CoachReport,
   type CoachResponse,

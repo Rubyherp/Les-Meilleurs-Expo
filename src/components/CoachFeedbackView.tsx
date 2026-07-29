@@ -1,6 +1,6 @@
 import { View, Text, Pressable, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import CoachPhaseCard from "./CoachPhaseCard";
+import CoachAgentCard from "./CoachAgentCard";
 import type { CoachResponse } from "@/models/CoachReport";
 
 interface Props {
@@ -108,9 +108,15 @@ export default function CoachFeedbackView({ coachResponse, loading, error, onTri
         <Text className="text-sm text-lesMuted leading-5">{report.overallSummary}</Text>
       </View>
 
-      {/* Phase cards */}
-      {report.phases.map((phase) => (
-        <CoachPhaseCard key={phase.phase} phase={phase} />
+      {report.coordinationNotes.map((note) => (
+        <View key={note} className="rounded-2xl border border-[#FFB347]/40 bg-[#FFB347]/10 p-3">
+          <Text className="text-xs leading-5 text-lesInk">{note}</Text>
+        </View>
+      ))}
+
+      {/* Specialist cards */}
+      {report.agents.map((agent) => (
+        <CoachAgentCard key={agent.agentId} agent={agent} />
       ))}
 
       {/* Footer */}

@@ -26,6 +26,7 @@ from app.services.coaching.deterministic import (
     _timing_agent,
     _tracking_phase,
     generate_deterministic_report,
+    observation_allows_specialists,
 )
 from app.services.coaching.orchestrator import run_coaching
 from app.services.coaching.provider import NullProvider
@@ -203,12 +204,12 @@ def test_deterministic_report_routes_solo_to_two_agents():
     assert report.mode == "single"
     assert report.practice_type == "solo"
     assert report.llm_model_used is None
-    assert len(report.phases) == 2
-    assert [agent.name for agent in report.phases] == [
+    assert len(report.agents) == 2
+    assert [agent.name for agent in report.agents] == [
         "Observation Agent",
         "Timing Agent",
     ]
-    assert all(isinstance(p, CoachPhase) for p in report.phases)
+    assert all(isinstance(agent, CoachPhase) for agent in report.agents)
 
 
 def test_deterministic_report_adds_formation_for_group():
@@ -233,7 +234,7 @@ def test_deterministic_report_adds_formation_for_group():
     report = generate_deterministic_report(uuid4(), "single", ctx, is_group=True)
 
     assert report.practice_type == "group"
-    assert [agent.name for agent in report.phases] == [
+    assert [agent.name for agent in report.agents] == [
         "Observation Agent",
         "Timing Agent",
         "Formation Agent",
@@ -252,6 +253,7 @@ def test_observation_agent_warns_when_group_has_fewer_than_two_dancers():
         )
     )
     assert any(issue.category == "group_visibility" for issue in agent.issues)
+    assert not observation_allows_specialists(agent)
 
 
 def test_timing_agent_reports_reference_offset():
@@ -275,6 +277,43 @@ def test_formation_agent_is_group_only():
     assert "group choreography" in agent.summary
 
 
+def test_low_observation_quality_gates_other_agents():
+    ctx = CoachingContext(
+        observation=ObservationContext(
+            total_frames=10,
+            frames_with_detections=2,
+            frames_with_poses=1,
+            max_persons_per_frame=1,
+        ),
+        timing=TimingContext(available=True, sample_count=10, pulse_consistency=0.8),
+    )
+    report = generate_deterministic_report(uuid4(), "single", ctx)
+
+    assert report.agents[0].name == "Observation Agent"
+    assert report.agents[1].name == "Timing Agent"
+    assert report.agents[1].available is False
+    assert report.coordination_notes
+    assert "Observation Agent" in report.coordination_notes[0]
+
+
+def test_report_serializes_agent_contract_and_evidence():
+    ctx = CoachingContext(
+        observation=ObservationContext(
+            total_frames=10,
+            frames_with_detections=10,
+            frames_with_poses=10,
+            max_persons_per_frame=1,
+        ),
+        timing=TimingContext(available=True, sample_count=10, pulse_consistency=0.8),
+    )
+    payload = generate_deterministic_report(uuid4(), "single", ctx).model_dump(mode="json")
+
+    assert "agents" in payload
+    assert "phases" not in payload
+    assert payload["agents"][0]["agent_id"] == 1
+    assert payload["agents"][0]["evidence"][0]["metric"] == "visibility_coverage"
+
+
 # ── Orchestrator ────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -296,10 +335,10 @@ async def test_orchestrator_run_coaching_no_provider():
     assert report.session_id == session_id
     assert report.mode == "single"
     assert report.llm_model_used is None
-    assert len(report.phases) == 2
-    for p in report.phases:
-        assert p.source == "deterministic"
-        assert p.confidence is not None
+    assert len(report.agents) == 2
+    for agent in report.agents:
+        assert agent.source == "deterministic"
+        assert agent.confidence is not None
 
 
 @pytest.mark.asyncio
@@ -323,7 +362,7 @@ async def test_orchestrator_run_coaching_comparison_mode():
 
     assert report.mode == "comparison"
     assert report.practice_type == "group"
-    assert [agent.name for agent in report.phases] == [
+    assert [agent.name for agent in report.agents] == [
         "Observation Agent",
         "Timing Agent",
         "Formation Agent",

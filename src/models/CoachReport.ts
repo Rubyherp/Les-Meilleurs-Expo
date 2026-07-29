@@ -19,8 +19,18 @@ export interface CoachPhaseIssueJson {
   category: string | null;
 }
 
-export interface CoachPhaseJson {
-  phase: number;
+export interface CoachEvidenceJson {
+  metric: string;
+  value: number | string;
+  unit: string | null;
+  start_seconds: number | null;
+  end_seconds: number | null;
+  dancer_ids: number[];
+}
+
+export interface CoachAgentJson {
+  agent_id?: number;
+  phase?: number;
   name: string;
   available: boolean;
   source: string;
@@ -28,6 +38,7 @@ export interface CoachPhaseJson {
   strengths: string[];
   issues: CoachPhaseIssueJson[];
   suggestions: string[];
+  evidence?: CoachEvidenceJson[];
   confidence: number;
 }
 
@@ -37,7 +48,9 @@ export interface CoachReportJson {
   mode: "single" | "comparison";
   practice_type?: "solo" | "group";
   overall_summary: string;
-  phases: CoachPhaseJson[];
+  agents?: CoachAgentJson[];
+  phases?: CoachAgentJson[];
+  coordination_notes?: string[];
   generated_at: string;
   llm_model_used: string | null;
 }
@@ -59,8 +72,17 @@ export interface CoachPhaseIssue {
   category: string | null;
 }
 
-export interface CoachPhase {
-  phase: number;
+export interface CoachEvidence {
+  metric: string;
+  value: number | string;
+  unit: string | null;
+  startSeconds: number | null;
+  endSeconds: number | null;
+  dancerIds: number[];
+}
+
+export interface CoachAgent {
+  agentId: number;
   name: string;
   available: boolean;
   source: string;
@@ -68,6 +90,7 @@ export interface CoachPhase {
   strengths: string[];
   issues: CoachPhaseIssue[];
   suggestions: string[];
+  evidence: CoachEvidence[];
   confidence: number;
 }
 
@@ -77,7 +100,8 @@ export interface CoachReport {
   mode: "single" | "comparison";
   practiceType: "solo" | "group";
   overallSummary: string;
-  phases: CoachPhase[];
+  agents: CoachAgent[];
+  coordinationNotes: string[];
   generatedAt: string;
   llmModelUsed: string | null;
 }
@@ -99,9 +123,20 @@ function normalizeCoachPhaseIssue(json: CoachPhaseIssueJson): CoachPhaseIssue {
   };
 }
 
-function normalizeCoachPhase(json: CoachPhaseJson): CoachPhase {
+function normalizeCoachEvidence(json: CoachEvidenceJson): CoachEvidence {
   return {
-    phase: json.phase,
+    metric: json.metric,
+    value: json.value,
+    unit: json.unit,
+    startSeconds: json.start_seconds,
+    endSeconds: json.end_seconds,
+    dancerIds: json.dancer_ids,
+  };
+}
+
+function normalizeCoachAgent(json: CoachAgentJson): CoachAgent {
+  return {
+    agentId: json.agent_id ?? json.phase ?? 0,
     name: json.name,
     available: json.available,
     source: json.source,
@@ -109,6 +144,7 @@ function normalizeCoachPhase(json: CoachPhaseJson): CoachPhase {
     strengths: json.strengths,
     issues: json.issues.map(normalizeCoachPhaseIssue),
     suggestions: json.suggestions,
+    evidence: (json.evidence ?? []).map(normalizeCoachEvidence),
     confidence: json.confidence,
   };
 }
@@ -120,7 +156,8 @@ function normalizeCoachReport(json: CoachReportJson): CoachReport {
     mode: json.mode,
     practiceType: json.practice_type ?? "solo",
     overallSummary: json.overall_summary,
-    phases: json.phases.map(normalizeCoachPhase),
+    agents: (json.agents ?? json.phases ?? []).map(normalizeCoachAgent),
+    coordinationNotes: json.coordination_notes ?? [],
     generatedAt: json.generated_at,
     llmModelUsed: json.llm_model_used,
   };
