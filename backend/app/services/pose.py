@@ -77,8 +77,13 @@ def padded_box(box: BoundingBox, frame_width: int, frame_height: int, padding: f
     )
 
 
-@lru_cache(maxsize=4)
-def _load_pose_landmarker(asset_path: str):
+@lru_cache(maxsize=12)
+def _load_pose_landmarker(
+    asset_path: str,
+    min_detection_confidence: float,
+    min_presence_confidence: float,
+    min_tracking_confidence: float,
+):
     path = Path(asset_path)
     if not path.is_file():
         raise ModelAssetError(
@@ -95,6 +100,9 @@ def _load_pose_landmarker(asset_path: str):
         base_options=python.BaseOptions(model_asset_path=str(path)),
         running_mode=vision.RunningMode.IMAGE,
         num_poses=1,
+        min_pose_detection_confidence=min_detection_confidence,
+        min_pose_presence_confidence=min_presence_confidence,
+        min_tracking_confidence=min_tracking_confidence,
     )
     return mp, vision.PoseLandmarker.create_from_options(options)
 
@@ -102,11 +110,22 @@ def _load_pose_landmarker(asset_path: str):
 class MediaPipePoseEstimator(PoseEstimator):
     """MediaPipe Tasks PoseLandmarker in IMAGE mode, loaded once per process."""
 
-    def __init__(self, asset_path: str, padding: float = 0.15):
+    def __init__(
+        self,
+        asset_path: str,
+        padding: float = 0.15,
+        *,
+        min_detection_confidence: float = 0.5,
+        min_presence_confidence: float = 0.5,
+        min_tracking_confidence: float = 0.5,
+    ):
         if padding < 0:
             raise ValueError("padding must not be negative")
         self.asset_path = asset_path
         self.padding = padding
+        self.min_detection_confidence = min_detection_confidence
+        self.min_presence_confidence = min_presence_confidence
+        self.min_tracking_confidence = min_tracking_confidence
 
     def estimate(self, frame: Any, box: BoundingBox) -> PoseEstimate | None:
         height, width = frame.shape[:2]
@@ -124,7 +143,12 @@ class MediaPipePoseEstimator(PoseEstimator):
         crop = frame[y1:y2, x1:x2]
         if crop.size == 0:
             return None
-        mp, landmarker = _load_pose_landmarker(self.asset_path)
+        mp, landmarker = _load_pose_landmarker(
+            self.asset_path,
+            self.min_detection_confidence,
+            self.min_presence_confidence,
+            self.min_tracking_confidence,
+        )
         rgb_crop = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
         image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_crop)
         result = landmarker.detect(image)

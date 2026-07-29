@@ -17,6 +17,7 @@ import CalibrationOverlay from "@/components/CalibrationOverlay";
 import DancerCountSelector from "@/components/DancerCountSelector";
 import {
   CalibrationCorners,
+  CalibrationSource,
   DEFAULT_CALIBRATION_CORNERS,
 } from "@/models/Calibration";
 
@@ -31,6 +32,9 @@ export default function CreateModeAScreen() {
   const [calibrationCorners, setCalibrationCorners] = useState<CalibrationCorners>(
     DEFAULT_CALIBRATION_CORNERS
   );
+  const [calibrationConfirmed, setCalibrationConfirmed] = useState(false);
+  const [calibrationSource, setCalibrationSource] =
+    useState<CalibrationSource>("approximate");
   const [previewRect, setPreviewRect] = useState({ width: 0, height: 0 });
   const [isCameraVisible, setIsCameraVisible] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -50,6 +54,8 @@ export default function CreateModeAScreen() {
       setVideoUri(result.assets[0].uri);
       setVideoSource("library");
       setCalibrationCorners(DEFAULT_CALIBRATION_CORNERS);
+      setCalibrationConfirmed(false);
+      setCalibrationSource("approximate");
     }
   };
 
@@ -61,6 +67,8 @@ export default function CreateModeAScreen() {
       ]);
       if (!cameraPermission.granted || !microphonePermission.granted) return;
       cameraSessionActive.current = true;
+      setCalibrationConfirmed(false);
+      setCalibrationSource("approximate");
       setIsCameraVisible(true);
     } catch {
       cameraSessionActive.current = false;
@@ -99,6 +107,7 @@ export default function CreateModeAScreen() {
     const session = store.createSession(title, isGroup, {
       attemptVideoUri: videoUri,
       calibrationCorners,
+      calibrationSource,
     }, expectedDancerCount);
     router.dismissAll();
     setTimeout(() => {
@@ -220,7 +229,11 @@ export default function CreateModeAScreen() {
                     <CalibrationOverlay
                       previewRect={previewRect}
                       initialCorners={calibrationCorners}
-                      onCornersChange={setCalibrationCorners}
+                      onCornersChange={(corners) => {
+                        setCalibrationCorners(corners);
+                        setCalibrationConfirmed(false);
+                        setCalibrationSource("approximate");
+                      }}
                     />
                   </View>
                 )}
@@ -228,6 +241,23 @@ export default function CreateModeAScreen() {
               <Text className="text-xs leading-4 text-lesMuted">
                 Before you record, place the four handles around the visible dance floor. This helps us read the formation.
               </Text>
+              <Pressable
+                className={`items-center rounded-xl border p-3 ${
+                  calibrationConfirmed
+                    ? "border-lesLime bg-lesLime/20"
+                    : "border-white/40"
+                }`}
+                onPress={() => {
+                  setCalibrationConfirmed(true);
+                  setCalibrationSource("human");
+                }}
+              >
+                <Text className="font-semibold text-white">
+                  {calibrationConfirmed
+                    ? "Stage corners confirmed"
+                    : "Confirm stage corners"}
+                </Text>
+              </Pressable>
               <View className="flex-row gap-3">
                 <Pressable
                   className="flex-1 items-center rounded-xl bg-lesCoral p-4"
@@ -256,7 +286,7 @@ export default function CreateModeAScreen() {
 
           {videoSource === "library" && (
             <InlineStatus
-              text="Library video: using the default stage corners because there is no preview to calibrate."
+              text="Library video: using provisional full-frame stage bounds. The analyzer will validate them and flag unreliable mapping."
               icon="information-circle"
             />
           )}

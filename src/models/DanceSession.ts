@@ -1,5 +1,5 @@
 import { randomUUID } from "expo-crypto";
-import { CalibrationCorners } from "./Calibration";
+import { CalibrationCorners, CalibrationSource } from "./Calibration";
 
 export type PracticeType = "solo" | "group";
 
@@ -14,6 +14,7 @@ export interface DanceSession {
   attemptVideoUri?: string;
   referenceVideoUri?: string;
   calibrationCorners?: CalibrationCorners;
+  calibrationSource?: CalibrationSource;
   remoteSessionID?: string;
   remoteTaskID?: string;
 }
@@ -22,6 +23,7 @@ export interface DanceSessionMediaOptions {
   attemptVideoUri?: string;
   referenceVideoUri?: string;
   calibrationCorners?: CalibrationCorners;
+  calibrationSource?: CalibrationSource;
 }
 
 export function createDanceSession(

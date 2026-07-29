@@ -28,6 +28,7 @@ import CalibrationOverlay from "@/components/CalibrationOverlay";
 import DancerCountSelector from "@/components/DancerCountSelector";
 import {
   CalibrationCorners,
+  CalibrationSource,
   DEFAULT_CALIBRATION_CORNERS,
 } from "@/models/Calibration";
 
@@ -47,6 +48,9 @@ export default function CreateModeBScreen() {
   const [calibrationCorners, setCalibrationCorners] = useState<CalibrationCorners>(
     DEFAULT_CALIBRATION_CORNERS
   );
+  const [calibrationConfirmed, setCalibrationConfirmed] = useState(false);
+  const [calibrationSource, setCalibrationSource] =
+    useState<CalibrationSource>("approximate");
   const [previewRect, setPreviewRect] = useState({ width: 0, height: 0 });
   const [isLoadingRef, setIsLoadingRef] = useState(false);
   const [isLoadingAttempt, setIsLoadingAttempt] = useState(false);
@@ -79,6 +83,8 @@ export default function CreateModeBScreen() {
           setAttemptVideoUri(uri);
           setAttemptSource("library");
           setCalibrationCorners(DEFAULT_CALIBRATION_CORNERS);
+          setCalibrationConfirmed(false);
+          setCalibrationSource("approximate");
           setAttemptReady(true);
         }
       }
@@ -95,6 +101,8 @@ export default function CreateModeBScreen() {
       ]);
       if (!cameraPermission.granted || !microphonePermission.granted) return;
       cameraSessionActive.current = true;
+      setCalibrationConfirmed(false);
+      setCalibrationSource("approximate");
       setIsCameraVisible(true);
     } catch {
       cameraSessionActive.current = false;
@@ -135,6 +143,7 @@ export default function CreateModeBScreen() {
       attemptVideoUri,
       referenceVideoUri,
       calibrationCorners,
+      calibrationSource,
     }, expectedDancerCount);
     router.dismissAll();
     setTimeout(() => {
@@ -144,6 +153,7 @@ export default function CreateModeBScreen() {
   };
 
   const canContinue = title.trim().length > 0;
+  const canAnalyze = attemptReady;
 
   return (
     <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-lesBackground">
@@ -280,7 +290,11 @@ export default function CreateModeBScreen() {
                         <CalibrationOverlay
                           previewRect={previewRect}
                           initialCorners={calibrationCorners}
-                          onCornersChange={setCalibrationCorners}
+                          onCornersChange={(corners) => {
+                            setCalibrationCorners(corners);
+                            setCalibrationConfirmed(false);
+                            setCalibrationSource("approximate");
+                          }}
                         />
                       </View>
                     )}
@@ -288,6 +302,23 @@ export default function CreateModeBScreen() {
                   <Text className="text-xs text-lesMuted">
                     Set the four visible stage corners before recording. These corners are sent with your take.
                   </Text>
+                  <Pressable
+                    className={`items-center rounded-xl border p-3 ${
+                      calibrationConfirmed
+                        ? "border-lesLime bg-lesLime/20"
+                        : "border-white/40"
+                    }`}
+                    onPress={() => {
+                      setCalibrationConfirmed(true);
+                      setCalibrationSource("human");
+                    }}
+                  >
+                    <Text className="font-semibold text-white">
+                      {calibrationConfirmed
+                        ? "Stage corners confirmed"
+                        : "Confirm stage corners"}
+                    </Text>
+                  </Pressable>
                   <View className="flex-row gap-3">
                     <Pressable
                       className="flex-1 items-center rounded-xl bg-lesCoral p-4"
@@ -316,7 +347,11 @@ export default function CreateModeBScreen() {
               {isLoadingAttempt && <InlineStatus text="Preparing your take…" icon="sync" />}
               {attemptSource === "library" && (
                 <InlineStatus
-                  text="Library video: using the default stage corners because there is no preview to calibrate."
+                  text={
+                    referenceVideoUri
+                      ? "Using provisional full-frame stage bounds for this comparison. The analyzer will flag unreliable mapping."
+                      : "Using provisional full-frame stage bounds. The analyzer will validate the mapping."
+                  }
                   icon="information-circle"
                 />
               )}
@@ -334,7 +369,7 @@ export default function CreateModeBScreen() {
               )}
               <PrimaryButton
                 title="Analyze my practice"
-                enabled={attemptReady}
+                enabled={canAnalyze}
                 onPress={handleAnalyze}
               />
             </>

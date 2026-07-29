@@ -1,4 +1,7 @@
-import { CalibrationCorners } from "../models/Calibration";
+import {
+  CalibrationCorners,
+  CalibrationSource,
+} from "../models/Calibration";
 import type { Phase4ResultJson } from "../models/Phase4Result";
 import type { Phase5ResultJson } from "../models/Phase5Result";
 import { logger } from "../utils/logger";
@@ -47,6 +50,12 @@ export interface RemoteTaskResponse {
   session_id: string;
   status: string;
   progress: number;
+  control?: {
+    stage?: string;
+    progress?: number;
+    sampled_frames?: number;
+    quality?: Record<string, unknown>;
+  } | null;
   error?: string | null;
   result?: Record<string, unknown> | null;
 }
@@ -141,12 +150,16 @@ export async function createRemoteSession(): Promise<RemoteSessionResponse> {
 
 export async function submitCalibration(
   sessionID: string,
-  corners: CalibrationCorners
+  corners: CalibrationCorners,
+  source: CalibrationSource = "human"
 ): Promise<void> {
   await request(`/sessions/${encodeURIComponent(sessionID)}/calibration`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ points: corners.map((corner) => [corner.x, corner.y]) }),
+    body: JSON.stringify({
+      points: corners.map((corner) => [corner.x, corner.y]),
+      source,
+    }),
   });
 }
 
@@ -167,7 +180,7 @@ function mimeTypeForName(name: string): string {
 export async function uploadAttemptVideo(
   sessionID: string,
   uri: string,
-  options?: { name?: string; type?: string }
+  options?: { name?: string; type?: string; expectedDancerCount?: number }
 ): Promise<RemoteUploadResponse> {
   const name = options?.name ?? fileNameForUri(uri);
   const form = new FormData();
@@ -178,6 +191,10 @@ export async function uploadAttemptVideo(
       name,
       type: options?.type ?? mimeTypeForName(name),
     } as unknown as Blob
+  );
+  form.append(
+    "expected_dancer_count",
+    String(Math.max(1, Math.round(options?.expectedDancerCount ?? 1)))
   );
   return request<RemoteUploadResponse>(`/sessions/${encodeURIComponent(sessionID)}/upload`, {
     method: "POST",
@@ -233,7 +250,8 @@ export async function uploadAttemptVideoB(
 export async function createComparison(
   sessionID: string,
   referenceMediaId: string,
-  attemptMediaId: string
+  attemptMediaId: string,
+  expectedDancerCount = 1
 ): Promise<RemoteComparisonResponse> {
   return request<RemoteComparisonResponse>(`/sessions/${encodeURIComponent(sessionID)}/compare`, {
     method: "POST",
@@ -241,6 +259,7 @@ export async function createComparison(
     body: JSON.stringify({
       reference_media_id: referenceMediaId,
       attempt_media_id: attemptMediaId,
+      expected_dancer_count: Math.max(1, Math.round(expectedDancerCount)),
     }),
   });
 }

@@ -5,7 +5,7 @@ from uuid import UUID
 
 from app.core.logger import logger
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -93,10 +93,25 @@ async def set_calibration(
     session = await db.get(AnalysisSession, session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found.")
-    session.calibration = {"points": [list(point) for point in payload.points]}
+    source = payload.source
+    calibration_status = {
+        "human": "verified",
+        "approximate": "provisional",
+        "agent": "proposed",
+    }[source]
+    session.calibration = {
+        "points": [list(point) for point in payload.points],
+        "source": source,
+        "status": calibration_status,
+    }
     await db.commit()
     logger.api("POST", f"/sessions/{session_id}/calibration", "calibration saved")
-    return CalibrationResponse(session_id=session_id, points=payload.points)
+    return CalibrationResponse(
+        session_id=session_id,
+        points=payload.points,
+        source=source,
+        status=session.calibration["status"],
+    )
 
 
 @router.get("/sessions/{session_id}/results", response_model=SessionResultResponse)
@@ -205,6 +220,7 @@ async def create_comparison(
         mode="comparison",
         reference_media_id=reference.id,
         attempt_media_id=attempt.id,
+        expected_dancer_count=payload.expected_dancer_count,
         status="pending",
         progress=0,
     )
@@ -245,6 +261,7 @@ async def create_comparison(
 async def upload_video(
     session_id: UUID,
     video: UploadFile = File(...),
+    expected_dancer_count: int = Form(1, ge=1, le=24),
     db: AsyncSession = Depends(get_db),
     storage: Storage = Depends(get_storage_service),
     dispatcher: TaskDispatcher = Depends(get_task_dispatcher),
@@ -258,7 +275,13 @@ async def upload_video(
     await db.flush()
     logger.api("POST", f"/sessions/{session_id}/upload", f"media_id={media.id}")
 
-    job = AnalysisJob(session_id=session_id, media_id=media.id, status="pending", progress=0)
+    job = AnalysisJob(
+        session_id=session_id,
+        media_id=media.id,
+        expected_dancer_count=expected_dancer_count,
+        status="pending",
+        progress=0,
+    )
     session.status = "queued"
     db.add(job)
     await db.commit()
@@ -287,7 +310,11 @@ async def upload_video(
 
     return UploadResponse(session_id=session_id, media_id=stored_media_id, task_id=task_id, status=task_status)
 
-@router.get("/tasks/{task_id}", response_model=TaskStatusResponse)
+@router.get(
+    "/tasks/{task_id}",
+    response_model=TaskStatusResponse,
+    response_model_exclude_unset=True,
+)
 async def get_task_status(task_id: UUID, db: AsyncSession = Depends(get_db)) -> TaskStatusResponse:
     query = (
         select(AnalysisJob)
@@ -297,13 +324,18 @@ async def get_task_status(task_id: UUID, db: AsyncSession = Depends(get_db)) -> 
     job = (await db.execute(query)).scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=404, detail="Task not found.")
+    response = {
+        "task_id": job.id,
+        "session_id": job.session_id,
+        "status": job.status,
+        "progress": job.progress,
+        "error": job.error_message,
+        "result": job.result.result_metadata if job.result else None,
+    }
+    if job.control_state is not None:
+        response["control"] = job.control_state
     return TaskStatusResponse(
-        task_id=job.id,
-        session_id=job.session_id,
-        status=job.status,
-        progress=job.progress,
-        error=job.error_message,
-        result=job.result.result_metadata if job.result else None,
+        **response
     )
 
 

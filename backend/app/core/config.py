@@ -46,6 +46,25 @@ class Settings(BaseSettings):
     yolo_model_path: str = "models/yolo11n.pt"
     pose_model_path: str = "models/pose_landmarker_lite.task"
     ml_device: str = "cpu"
+    analysis_control_mode: str = "active"
+    analysis_max_attempts: int = Field(default=3, ge=1, le=5)
+    analysis_min_quality_score: float = Field(default=0.72, ge=0, le=1)
+    analysis_min_improvement: float = Field(default=0.025, ge=0, le=1)
+    analysis_scout_fps: float = Field(default=2.0, gt=0)
+    analysis_scout_max_frames: int = Field(default=24, ge=4, le=120)
+    analysis_fast_sample_fps: float = Field(default=5.0, gt=0)
+    analysis_recovery_sample_fps: float = Field(default=15.0, gt=0)
+    analysis_image_size: int = Field(default=640, ge=320)
+    analysis_recovery_image_size: int = Field(default=960, ge=320)
+    analysis_segment_padding_seconds: float = Field(default=0.75, ge=0)
+    analysis_max_retry_seconds: float = Field(default=30.0, ge=0)
+    analysis_cache_enabled: bool = True
+    analysis_auto_calibration_enabled: bool = False
+    analysis_recovery_yolo_model_path: str | None = None
+    analysis_recovery_pose_model_path: str | None = None
+    pose_min_detection_confidence: float = Field(default=0.5, ge=0, le=1)
+    pose_min_presence_confidence: float = Field(default=0.5, ge=0, le=1)
+    pose_min_tracking_confidence: float = Field(default=0.5, ge=0, le=1)
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
@@ -63,6 +82,10 @@ class Settings(BaseSettings):
     def validate_tracker_thresholds(self) -> "Settings":
         if self.tracker_high_confidence < self.tracker_low_confidence:
             raise ValueError("TRACKER_HIGH_CONFIDENCE must be at least TRACKER_LOW_CONFIDENCE")
+        if self.analysis_control_mode not in {"disabled", "shadow", "active"}:
+            raise ValueError(
+                "ANALYSIS_CONTROL_MODE must be one of disabled, shadow, or active"
+            )
         return self
 
 

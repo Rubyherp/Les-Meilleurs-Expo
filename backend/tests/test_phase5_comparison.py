@@ -9,7 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.core.config import Settings
 from app.db.base import Base
-from app.models import AnalysisJob, AnalysisResult, AnalysisSession, StoredMedia
+from app.models import (
+    AnalysisAttempt,
+    AnalysisCache,
+    AnalysisJob,
+    AnalysisResult,
+    AnalysisSession,
+    StoredMedia,
+)
 from app.services.comparison import (
     ComparisonError,
     compare_result_metadata,
@@ -239,10 +246,19 @@ def test_comparison_task_persists_result_with_injected_pipeline(tmp_path, monkey
         async with session_factory() as db:
             job = await db.get(AnalysisJob, job_id)
             result = (await db.execute(select(AnalysisResult).where(AnalysisResult.job_id == job_id))).scalar_one()
+            attempts = (
+                await db.execute(
+                    select(AnalysisAttempt).where(AnalysisAttempt.job_id == job_id)
+                )
+            ).scalars().all()
+            cache_entries = (await db.execute(select(AnalysisCache))).scalars().all()
             assert job is not None
             assert job.status == "completed"
             assert result.result_metadata["phase"] == 5
             assert result.result_metadata["mode"] == "comparison"
+            assert result.result_metadata["analysis_control"]["version"] == 1
+            assert len(attempts) == 2
+            assert len(cache_entries) == 1
         await engine.dispose()
 
     asyncio.run(run())
