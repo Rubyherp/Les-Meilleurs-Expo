@@ -39,6 +39,27 @@ function assertEqual<T>(actual: T, expected: T, label: string): void {
 }
 
 async function main() {
+  // ─── Test 0: practice type and expected group size are explicit ─────────
+  console.log("\n--- Test 0: createSession stores practice metadata ---");
+  {
+    const solo = useAppStore.getState().createSession("Solo metadata", false);
+    assertEqual(solo.practiceType, "solo", "solo session stores solo practice type");
+    assertEqual(solo.expectedDancerCount, 1, "solo session expects one dancer");
+
+    const group = useAppStore
+      .getState()
+      .createSession("Group metadata", true, undefined, 4);
+    assertEqual(group.practiceType, "group", "group session stores group practice type");
+    assertEqual(group.expectedDancerCount, 4, "group stores expected dancer count");
+    assertEqual(group.participantIDs.length, 4, "group creates the selected number of participants");
+
+    const defaultGroup = useAppStore
+      .getState()
+      .createSession("Default group metadata", true);
+    assertEqual(defaultGroup.expectedDancerCount, 2, "group defaults to two dancers");
+    assertEqual(defaultGroup.participantIDs.length, 2, "default group creates two participants");
+  }
+
   // ─── Test 1: seedFromBackend re-throws on failure ────────────────────────
   console.log("\n--- Test 1: seedFromBackend re-throws errors ---");
   {

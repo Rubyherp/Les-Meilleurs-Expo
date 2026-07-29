@@ -53,7 +53,11 @@ export default function AnalysisScreen() {
     setCoachError(null);
     try {
       const backendId = session.remoteSessionID;
-      const result = await triggerCoach(backendId);
+      const result = await triggerCoach(
+        backendId,
+        session.practiceType === "group",
+        session.expectedDancerCount
+      );
       if (result.status === "completed") {
         setCoachResponse(result);
       } else {
@@ -66,7 +70,12 @@ export default function AnalysisScreen() {
     } finally {
       setCoachLoading(false);
     }
-  }, [sessionId, session?.remoteSessionID]);
+  }, [
+    sessionId,
+    session?.remoteSessionID,
+    session?.practiceType,
+    session?.expectedDancerCount,
+  ]);
 
   const runAnalysis = useCallback(async (isRetry = false) => {
     if (

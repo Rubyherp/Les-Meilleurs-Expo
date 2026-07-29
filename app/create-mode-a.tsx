@@ -14,6 +14,7 @@ import PrimaryButton from "@/components/PrimaryButton";
 import InlineStatus from "@/components/InlineStatus";
 import TipCard from "@/components/TipCard";
 import CalibrationOverlay from "@/components/CalibrationOverlay";
+import DancerCountSelector from "@/components/DancerCountSelector";
 import {
   CalibrationCorners,
   DEFAULT_CALIBRATION_CORNERS,
@@ -24,6 +25,7 @@ export default function CreateModeAScreen() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [isGroup, setIsGroup] = useState(false);
+  const [expectedDancerCount, setExpectedDancerCount] = useState(2);
   const [videoUri, setVideoUri] = useState<string | undefined>();
   const [videoSource, setVideoSource] = useState<"recorded" | "library" | undefined>();
   const [calibrationCorners, setCalibrationCorners] = useState<CalibrationCorners>(
@@ -97,7 +99,7 @@ export default function CreateModeAScreen() {
     const session = store.createSession(title, isGroup, {
       attemptVideoUri: videoUri,
       calibrationCorners,
-    });
+    }, expectedDancerCount);
     router.dismissAll();
     setTimeout(() => {
       store.setPresentedSession(session);
@@ -149,8 +151,10 @@ export default function CreateModeAScreen() {
             />
             <View className="flex-row items-center justify-between rounded-2xl border border-lesLine bg-white/45 px-4 py-3">
               <View className="flex-1 gap-0.5">
-                <Text className="text-lesInk">This is a group choreography</Text>
-                <Text className="text-xs text-lesMuted">Track spacing between dancers.</Text>
+                <Text className="text-lesInk">Group choreography (2+ dancers)</Text>
+                <Text className="text-xs text-lesMuted">
+                  Leave off for solo timing and observation coaching.
+                </Text>
               </View>
               <Switch
                 value={isGroup}
@@ -162,6 +166,12 @@ export default function CreateModeAScreen() {
                 thumbColor="#F7F4EE"
               />
             </View>
+            {isGroup && (
+              <DancerCountSelector
+                value={expectedDancerCount}
+                onChange={setExpectedDancerCount}
+              />
+            )}
           </View>
 
           <View className="gap-3">

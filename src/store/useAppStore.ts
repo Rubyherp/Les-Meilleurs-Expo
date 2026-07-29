@@ -33,7 +33,8 @@ interface AppState {
   createSession: (
     title: string,
     isGroup: boolean,
-    mediaOptions?: DanceSessionMediaOptions
+    mediaOptions?: DanceSessionMediaOptions,
+    expectedDancerCount?: number
   ) => DanceSession;
   updateSession: (sessionID: string, patch: Partial<DanceSession>) => void;
   analyze: (session: DanceSession) => Promise<void>;
@@ -54,6 +55,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       title: "Preview your first trend",
       recordedAt: 1_700_000_000_000, // 2023-11-14 in ms
       duration: 18.6,
+      practiceType: "solo",
+      expectedDancerCount: 1,
       participantIDs: [],
     },
     {
@@ -61,6 +64,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       title: "Compare two takes",
       recordedAt: 1_700_000_000_000,
       duration: 18.6,
+      practiceType: "solo",
+      expectedDancerCount: 1,
       participantIDs: [],
     },
   ],
@@ -80,18 +85,26 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ presentedSession: session });
   },
 
-  createSession: (title, isGroup, mediaOptions) => {
-    const participants = isGroup ? createGroupParticipants() : [];
+  createSession: (title, isGroup, mediaOptions, expectedDancerCount) => {
+    const participants = isGroup
+      ? createGroupParticipants(expectedDancerCount)
+      : [];
     const session = {
       ...createDanceSession(
-      title,
-      isGroup,
-      24,
-      participants.map((participant) => participant.id)
+        title,
+        isGroup,
+        24,
+        participants.map((participant) => participant.id),
+        expectedDancerCount
       ),
       ...mediaOptions,
     };
-    logger.store.action("createSession", { id: session.id, title, isGroup });
+    logger.store.action("createSession", {
+      id: session.id,
+      title,
+      practiceType: session.practiceType,
+      expectedDancerCount: session.expectedDancerCount,
+    });
     set((state) => ({
       sessions: [session, ...state.sessions],
       participantsBySession: {
@@ -136,6 +149,11 @@ export const useAppStore = create<AppState>((set, get) => ({
           ...state.resultsBySession,
           [targetSessionId]: result,
         },
+        sessions: state.sessions.map((session) =>
+          session.id === targetSessionId
+            ? { ...session, remoteSessionID: backendSessionId }
+            : session
+        ),
         analyzingSessionId: null,
       }));
     } catch (err) {
@@ -184,6 +202,11 @@ export const useAppStore = create<AppState>((set, get) => ({
           ...state.resultsBySession,
           [targetSessionId]: result,
         },
+        sessions: state.sessions.map((session) =>
+          session.id === targetSessionId
+            ? { ...session, remoteSessionID: backendSessionId }
+            : session
+        ),
         analyzingSessionId: null,
       }));
     } catch (err) {

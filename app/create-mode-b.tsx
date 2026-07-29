@@ -25,6 +25,7 @@ import PrimaryButton from "@/components/PrimaryButton";
 import InlineStatus from "@/components/InlineStatus";
 import TipCard from "@/components/TipCard";
 import CalibrationOverlay from "@/components/CalibrationOverlay";
+import DancerCountSelector from "@/components/DancerCountSelector";
 import {
   CalibrationCorners,
   DEFAULT_CALIBRATION_CORNERS,
@@ -37,6 +38,7 @@ export default function CreateModeBScreen() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [isGroup, setIsGroup] = useState(false);
+  const [expectedDancerCount, setExpectedDancerCount] = useState(2);
   const [referenceReady, setReferenceReady] = useState(false);
   const [referenceVideoUri, setReferenceVideoUri] = useState<string | undefined>();
   const [attemptReady, setAttemptReady] = useState(false);
@@ -133,7 +135,7 @@ export default function CreateModeBScreen() {
       attemptVideoUri,
       referenceVideoUri,
       calibrationCorners,
-    });
+    }, expectedDancerCount);
     router.dismissAll();
     setTimeout(() => {
       store.setPresentedSession(session);
@@ -184,8 +186,13 @@ export default function CreateModeBScreen() {
                     logger.ui.input("title", "changed");
                   }}
                 />
-                <View className="flex-row items-center justify-between">
-                  <Text className="text-lesInk">This is a group choreography</Text>
+                <View className="flex-row items-center justify-between rounded-2xl border border-lesLine bg-white/45 px-4 py-3">
+                  <View className="flex-1 gap-0.5 pr-3">
+                    <Text className="text-lesInk">Group choreography (2+ dancers)</Text>
+                    <Text className="text-xs text-lesMuted">
+                      Leave off for solo timing and observation coaching.
+                    </Text>
+                  </View>
                   <Switch
                     value={isGroup}
                     onValueChange={(value) => {
@@ -195,6 +202,12 @@ export default function CreateModeBScreen() {
                     trackColor={{ false: "#DAD6CC", true: "#FF5C5C" }}
                   />
                 </View>
+                {isGroup && (
+                  <DancerCountSelector
+                    value={expectedDancerCount}
+                    onChange={setExpectedDancerCount}
+                  />
+                )}
               </View>
               <Pressable onPress={() => {
                 logger.ui.press("Choose reference video (Mode B)");

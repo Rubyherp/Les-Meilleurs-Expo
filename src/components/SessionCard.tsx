@@ -5,13 +5,15 @@ interface Props {
   session: {
     id: string;
     title: string;
+    practiceType: "solo" | "group";
+    expectedDancerCount: number;
     participantIDs: string[];
     duration: number;
   };
 }
 
 export default function SessionCard({ session }: Props) {
-  const isSolo = session.participantIDs.length === 0;
+  const isSolo = session.practiceType === "solo";
 
   return (
     <View className="flex-row items-center p-3.5 bg-white/60 border border-lesLine rounded-[22px] gap-3.5">
@@ -21,7 +23,9 @@ export default function SessionCard({ session }: Props) {
       <View className="flex-1 gap-1.5">
         <Text className="font-semibold text-lesInk">{session.title}</Text>
         <Text className="text-sm text-lesMuted">
-          {isSolo ? "Solo practice" : "Group choreography · 3 dancers"}
+          {isSolo
+            ? "Solo practice"
+            : `Group choreography · ${session.expectedDancerCount} dancers`}
         </Text>
         <Text className="text-xs font-semibold text-lesCoral">
           Draft · {session.duration} sec

@@ -3,39 +3,41 @@ import json
 from datetime import datetime, timezone
 from uuid import UUID
 
-from app.schemas.coaching import CoachIssue, CoachPhase, CoachingReport
+from app.schemas.coaching import CoachAgent, CoachIssue, CoachPhase, CoachingReport
 from app.services.coaching.context import CoachingContext, extract_coaching_context
 from app.services.coaching.deterministic import generate_deterministic_report
 from app.services.coaching.provider import create_provider
 
-_PHASE_NAMES = {2: "Camera & Visibility", 3: "Movement Flow", 4: "Space Usage", 5: "Performance Match"}
+_AGENT_NAMES = {1: "Observation Agent", 2: "Timing Agent", 3: "Formation Agent"}
 
-_SYSTEM_PROMPT = """You are a friendly dance coach giving constructive feedback to dancers. Use warm, encouraging, simple language — no technical jargon. Analyse only the provided data.\nReturn a JSON object with: summary (1-2 sentences in plain dancer-friendly language), strengths (list of cheerful strings), issues (list of {description, severity: low|medium|high, category: string|null}), suggestions (list of actionable, supportive tips), confidence (float 0-1). Never invent data not present. Write as if you're talking directly to the dancer."""
+_SYSTEM_PROMPT = """You are one specialist in a collaborative dance-coaching team. Use warm, encouraging, simple language with no technical jargon. Analyse only the provided structured measurements. Return a JSON object with: summary (1-2 sentences), strengths (list of strings), issues (list of {description, severity: low|medium|high, category: string|null}), suggestions (list of actionable tips), confidence (float 0-1). Never invent observations or imply that you measured music beats when no reference was provided."""
 
-_PHASE_PROMPTS = {
-    2: "You are a dance visibility coach. Check if the dancer was clearly seen by the camera throughout the routine.",
-    3: "You are a movement flow coach. Check how smoothly the dancer was followed and tracked across the routine.",
-    4: "You are a space usage coach. Check how well the dancer used the practice space and moved around.",
-    5: "You are a performance match coach. Compare the dancer's routine against the reference and note areas for improvement.",
+_AGENT_PROMPTS = {
+    1: "You are the Observation Agent. Judge camera visibility, pose readability, occlusion, and tracking reliability.",
+    2: "You are the Timing Agent. Judge reference timing offset when a reference exists; otherwise discuss only movement-pulse consistency.",
+    3: "You are the Formation Agent for group choreography. Judge relative spacing, crowding, and spatial match.",
 }
 
-def _parse_llm_phase(raw: str | None, phase_num: int, ctx) -> CoachPhase:
-    """Parse LLM JSON response into CoachPhase. Fall back to deterministic on ANY failure."""
+def _parse_llm_agent(raw: str | None, agent_num: int, ctx) -> CoachAgent:
+    """Parse an LLM specialist response, falling back on any failure."""
+    deterministic = _get_deterministic_agent(agent_num, ctx)
     if not raw:
-        return _get_deterministic_phase(phase_num, ctx)
+        return deterministic
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        return _get_deterministic_phase(phase_num, ctx)
+        return deterministic
     if not isinstance(data, dict):
-        return _get_deterministic_phase(phase_num, ctx)
+        return deterministic
     
-    # Clamp confidence
-    conf = max(0.0, min(1.0, float(data.get("confidence", 0.5))))
+    try:
+        conf = max(0.0, min(1.0, float(data.get("confidence", deterministic.confidence))))
+    except (TypeError, ValueError):
+        return deterministic
     
     return CoachPhase(
-        phase=phase_num,
-        name=_PHASE_NAMES[phase_num],
+        phase=agent_num,
+        name=_AGENT_NAMES[agent_num],
         available=True,
         source="llm",
         summary=str(data.get("summary", "")).strip(),
@@ -46,82 +48,152 @@ def _parse_llm_phase(raw: str | None, phase_num: int, ctx) -> CoachPhase:
             category=str(i.get("category")) if i.get("category") else None,
         ) for i in (data.get("issues") or []) if isinstance(i, dict)],
         suggestions=[str(s) for s in (data.get("suggestions") or []) if isinstance(s, str)],
+        evidence=deterministic.evidence,
         confidence=round(conf, 2),
     )
 
-def _get_deterministic_phase(phase_num, ctx) -> CoachPhase:
-    """Get deterministic phase from the existing module."""
+def _get_deterministic_agent(agent_num: int, ctx: CoachingContext) -> CoachAgent:
     from app.services.coaching.deterministic import (
-        _detection_phase, _tracking_phase, _calibration_phase, _comparison_phase,
+        _formation_agent,
+        _observation_agent,
+        _timing_agent,
     )
-    mapping = {2: _detection_phase, 3: _tracking_phase, 4: _calibration_phase, 5: _comparison_phase}
-    sub_ctxs = {2: ctx.detection, 3: ctx.tracking, 4: ctx.calibration, 5: ctx.comparison}
-    fn = mapping.get(phase_num)
+    mapping = {
+        1: (_observation_agent, ctx.observation),
+        2: (_timing_agent, ctx.timing),
+        3: (_formation_agent, ctx.formation),
+    }
+    entry = mapping.get(agent_num)
+    if entry is None:
+        return CoachPhase(
+            phase=agent_num,
+            name=_AGENT_NAMES.get(agent_num, "Unknown Agent"),
+            available=False,
+            source="error",
+            summary="Unknown coaching agent.",
+            confidence=0.0,
+        )
+    fn, sub_ctx = entry
     if fn:
-        return fn(sub_ctxs[phase_num])
-    return CoachPhase(phase=phase_num, name=_PHASE_NAMES.get(phase_num, "Unknown"), available=False, source="error", summary="Unknown phase", confidence=0.0)
+        return fn(sub_ctx)
+    raise AssertionError("Agent mapping is incomplete.")
 
-def _format_context_for_llm(phase_num: int, ctx: CoachingContext) -> str:
+def _format_context_for_llm(agent_num: int, ctx: CoachingContext) -> str:
     """Render structured context as a compact string for the LLM prompt."""
-    if phase_num == 2:
-        d = ctx.detection
-        return f"Detection: {d.frames_with_detections}/{d.total_frames} frames with detections, {d.frames_with_poses}/{d.total_frames} with poses, max {d.max_persons_per_frame} concurrent."
-    elif phase_num == 3:
-        t = ctx.tracking
-        return f"Tracking: {t.total_tracks} tracks, max {t.max_concurrent_tracks} concurrent, {t.occlusion_events} occlusions, {t.lost_events} lost over {t.total_frames} frames."
-    elif phase_num == 4:
-        c = ctx.calibration
-        return f"Calibration: {'active' if c.has_calibration else 'inactive'}, {c.grid_columns}x{c.grid_rows} grid, {c.frames_with_projection}/{c.total_frames} frames projected, {c.tracked_dancers} dancers, avg trajectory {c.avg_trajectory_length:.1f}."
-    elif phase_num == 5:
-        c_comp = ctx.comparison
-        if not c_comp.available:
-            return "Comparison not available (single-video mode)."
-        return f"Comparison: score={c_comp.overall_score:.4f}, {c_comp.matched_pairs} matched, {c_comp.unmatched_reference} unmatched ref, {c_comp.unmatched_attempt} unmatched att, avg DTW cost={c_comp.avg_dtw_cost:.4f}, avg deviation={c_comp.avg_deviation:.4f}."
+    if agent_num == 1:
+        observation = ctx.observation
+        return (
+            f"Observation: group={observation.is_group}, "
+            f"visible_frames={observation.frames_with_detections}/{observation.total_frames}, "
+            f"pose_frames={observation.frames_with_poses}/{observation.total_frames}, "
+            f"max_people={observation.max_persons_per_frame}, "
+            f"expected_people={observation.expected_dancer_count}, "
+            f"tracks={observation.total_tracks}, "
+            f"occlusions={observation.occlusion_events}, lost={observation.lost_events}."
+        )
+    if agent_num == 2:
+        timing = ctx.timing
+        return (
+            f"Timing: has_reference={timing.has_reference}, samples={timing.sample_count}, "
+            f"mean_signed_offset_seconds={timing.average_offset_seconds:.3f}, "
+            f"mean_absolute_offset_seconds={timing.average_absolute_offset_seconds:.3f}, "
+            f"offset_spread_seconds={timing.offset_spread_seconds:.3f}, "
+            f"pulse_consistency={timing.pulse_consistency:.3f}, "
+            f"group_sync_score={timing.group_sync_score}."
+        )
+    if agent_num == 3:
+        formation = ctx.formation
+        return (
+            f"Formation: dancers={formation.tracked_dancers}, "
+            f"group_frames={formation.observed_group_frames}, "
+            f"average_pair_distance={formation.average_pair_distance:.3f}, "
+            f"spacing_variation={formation.spacing_variation:.3f}, "
+            f"close_spacing_rate={formation.close_spacing_rate:.3f}, "
+            f"reference_match_score={formation.reference_match_score}."
+        )
     return ""
 
-async def _try_llm_phase(provider, phase_num: int, ctx: CoachingContext) -> CoachPhase:
-    """Try LLM for one phase. Falls back deterministically on any failure."""
+async def _try_llm_agent(provider, agent_num: int, ctx: CoachingContext) -> CoachAgent:
+    """Try an LLM specialist and fall back deterministically on any failure."""
+    deterministic = _get_deterministic_agent(agent_num, ctx)
+    if not deterministic.available:
+        return deterministic
     if not provider.available:
-        return _get_deterministic_phase(phase_num, ctx)
-    context_str = _format_context_for_llm(phase_num, ctx)
+        return deterministic
+    context_str = _format_context_for_llm(agent_num, ctx)
     messages = [
         {"role": "system", "content": _SYSTEM_PROMPT},
-        {"role": "user", "content": f"{_PHASE_PROMPTS.get(phase_num, '')}\n\nData:\n{context_str}\n\nRespond with a JSON object."},
+        {"role": "user", "content": f"{_AGENT_PROMPTS.get(agent_num, '')}\n\nData:\n{context_str}\n\nRespond with a JSON object."},
     ]
     try:
         raw = await asyncio.wait_for(provider.chat(messages), timeout=30.0)
     except (asyncio.TimeoutError, Exception):
-        return _get_deterministic_phase(phase_num, ctx)
-    return _parse_llm_phase(raw, phase_num, ctx)
+        return deterministic
+    return _parse_llm_agent(raw, agent_num, ctx)
 
-async def run_coaching(session_id: UUID, mode: str, result: dict) -> CoachingReport:
-    """Run coaching with LLM if available, fall back to deterministic per phase."""
-    ctx = extract_coaching_context(result, mode)
+async def run_coaching(
+    session_id: UUID,
+    mode: str,
+    result: dict,
+    *,
+    is_group: bool = False,
+    expected_dancer_count: int = 1,
+) -> CoachingReport:
+    """Run the applicable specialists through the existing AI coach."""
+    ctx = extract_coaching_context(
+        result,
+        mode,
+        is_group=is_group,
+        expected_dancer_count=expected_dancer_count,
+    )
     provider = create_provider()
 
     if not provider.available:
-        return generate_deterministic_report(session_id, mode, ctx)
+        return generate_deterministic_report(
+            session_id,
+            mode,
+            ctx,
+            is_group=is_group,
+        )
     
-    # Run all 4 phases concurrently — each fails independently
-    phases = list(await asyncio.gather(*[
-        _try_llm_phase(provider, p, ctx) for p in (2, 3, 4, 5)
-    ]))
-    
-    # Handle phase 5 availability for single mode
-    if mode != "comparison" and phases[3].source == "llm":
-        # Override with deterministic not-applicable if LLM didn't know
-        from app.services.coaching.deterministic import _comparison_phase as det_comp
-        phases[3] = _get_deterministic_phase(5, ctx)
-    
-    summaries = [p.summary for p in phases]
-    overall = f"Here's your coaching breakdown. " + " ".join(summaries)
+    from app.services.coaching.deterministic import (
+        _gated_agent,
+        observation_allows_specialists,
+    )
+
+    observation_baseline = _get_deterministic_agent(1, ctx)
+    observation = await _try_llm_agent(provider, 1, ctx)
+    agents = [observation]
+    coordination_notes: list[str] = []
+    if observation_allows_specialists(observation_baseline):
+        remaining_agent_numbers = [2, 3] if is_group else [2]
+        agents.extend(
+            await asyncio.gather(
+                *[
+                    _try_llm_agent(provider, agent_num, ctx)
+                    for agent_num in remaining_agent_numbers
+                ]
+            )
+        )
+    else:
+        reason = "Paused because the Observation Agent could not verify the video reliably."
+        coordination_notes.append(reason)
+        agents.append(_gated_agent(2, reason))
+        if is_group:
+            agents.append(_gated_agent(3, reason))
+
+    summaries = [agent.summary for agent in agents if agent.available]
+    practice_label = "Group" if is_group else "Solo"
+    overall = f"{practice_label} coaching team report. " + " ".join(summaries)
     
     return CoachingReport(
         session_id=session_id,
-        report_version=1,
+        report_version=3,
         mode=mode,
+        practice_type="group" if is_group else "solo",
         overall_summary=overall,
-        phases=phases,
+        agents=agents,
+        coordination_notes=coordination_notes,
         generated_at=datetime.now(timezone.utc),
         llm_model_used=provider.model_name if provider.available else None,
     )

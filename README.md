@@ -157,20 +157,20 @@ OpenCV, YOLOv11, MediaPipe, ByteTrack, SciPy DTW
 
 **Infra:** Docker Compose (API, worker, Postgres, Redis, MinIO)
 
-## AI Coaching (all phases)
+## Collaborative AI coaching
 
-The backend generates per-phase coaching reports covering all four analysis
-stages:
+The group-choreography switch routes each practice to the applicable coaching
+specialists:
 
-| Phase | Name | What it analyzes |
-|-------|------|-----------------|
-| 2 | Detection & Pose | Person detection coverage and pose estimation quality |
-| 3 | Tracking & Continuity | Identity continuity, occlusion rates, track loss |
-| 4 | Calibration & Space | Top-down projection quality and spatial coverage |
-| 5 | Reference Comparison | Reference-vs-attempt similarity and deviation scores |
+| Agent | Solo | Group | What it analyzes |
+|-------|------|-------|------------------|
+| Observation | Yes | Yes | Visibility, pose readability, occlusion, and track reliability |
+| Timing | Yes | Yes | Reference timing offset or movement-pulse consistency |
+| Formation | No | Yes | Relative spacing, crowding, and spatial match |
 
-Phase 5 shows "Not applicable" in single-video Mode A — all four phases are
-always present in every report.
+Group means two or more dancers. Formation feedback is intentionally omitted
+from solo reports. The existing AI coach coordinates the specialist outputs and
+presents one combined report.
 
 The coaching works **deterministically without any API key** — it inspects the
 analysis result metadata directly and produces data-grounded insights. Optionally
@@ -182,12 +182,14 @@ LLM_MODEL=gpt-4o-mini
 LLM_TEMPERATURE=0.3
 ```
 
-Coaching is triggered from the analysis results screen via a "Get AI Coaching"
+Coaching is triggered from the analysis results screen via a "Run coaching agents"
 button, or programmatically:
 
 ```sh
-curl -s -X POST "http://localhost:8000/api/v1/sessions/$SESSION_ID/coach" | jq .
-curl -s "http://localhost:8000/api/v1/sessions/$SESSION_ID/coach" | jq .report.phases
+curl -s -X POST "http://localhost:8000/api/v1/sessions/$SESSION_ID/coach" \
+  -H "Content-Type: application/json" \
+  -d '{"is_group":true,"expected_dancer_count":4}' | jq .
+curl -s "http://localhost:8000/api/v1/sessions/$SESSION_ID/coach" | jq .report.agents
 ```
 
 ## License
