@@ -69,6 +69,16 @@ def test_calibration_endpoint_and_results_404(client):
     )
     assert calibration.status_code == 200
     assert calibration.json()["points"][0] == [0.1, 0.1]
+    provisional = client.post(
+        f"/api/v1/sessions/{session_id}/calibration",
+        json={
+            "points": [[0.1, 0.1], [0.9, 0.1], [0.9, 0.9], [0.1, 0.9]],
+            "source": "approximate",
+        },
+    )
+    assert provisional.status_code == 200
+    assert provisional.json()["source"] == "approximate"
+    assert provisional.json()["status"] == "provisional"
     assert client.get(f"/api/v1/sessions/{session_id}/results").status_code == 404
 
 

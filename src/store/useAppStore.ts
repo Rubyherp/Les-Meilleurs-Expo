@@ -27,6 +27,7 @@ interface AppState {
   analyzingSessionId: string | null;
   resultsBySession: Record<string, AnalysisResult>;
   errorBySession: Record<string, string>;
+  analysisStageBySession: Record<string, string>;
 
   setShowingCreate: (show: boolean) => void;
   setPresentedSession: (session: DanceSession | null) => void;
@@ -75,6 +76,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   analyzingSessionId: null,
   resultsBySession: {},
   errorBySession: {},
+  analysisStageBySession: {},
 
   setShowingCreate: (show) => {
     logger.store.action("setShowingCreate", { show });
@@ -231,7 +233,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => {
       const errorBySession = { ...state.errorBySession };
       delete errorBySession[session.id];
-      return { analyzingSessionId: session.id, errorBySession };
+      return {
+        analyzingSessionId: session.id,
+        errorBySession,
+        analysisStageBySession: {
+          ...state.analysisStageBySession,
+          [session.id]: "queued",
+        },
+      };
     });
     try {
       const result = await analyzeSession(session, {
@@ -239,6 +248,13 @@ export const useAppStore = create<AppState>((set, get) => ({
           get().updateSession(session.id, { remoteSessionID }),
         onRemoteTask: (remoteTaskID) =>
           get().updateSession(session.id, { remoteTaskID }),
+        onRemoteStatus: (stage) =>
+          set((state) => ({
+            analysisStageBySession: {
+              ...state.analysisStageBySession,
+              [session.id]: stage,
+            },
+          })),
       });
       set((state) => ({
         resultsBySession: {
@@ -246,6 +262,10 @@ export const useAppStore = create<AppState>((set, get) => ({
           [session.id]: result,
         },
         analyzingSessionId: null,
+        analysisStageBySession: {
+          ...state.analysisStageBySession,
+          [session.id]: "completed",
+        },
       }));
     } catch (err) {
       logger.error("analyze", err);
@@ -258,6 +278,10 @@ export const useAppStore = create<AppState>((set, get) => ({
               : "We could not finish this analysis. Your session is still saved as a draft.",
         },
         analyzingSessionId: null,
+        analysisStageBySession: {
+          ...state.analysisStageBySession,
+          [session.id]: "failed",
+        },
       }));
       // Rethrow so callers (e.g. analysis screen) can react to the failure
       throw err;

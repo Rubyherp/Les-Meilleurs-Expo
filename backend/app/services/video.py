@@ -1,6 +1,7 @@
+import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Sequence
 
 
 class VideoDecodeError(RuntimeError):
@@ -30,6 +31,7 @@ class SampledFrame:
     frame_index: int
     timestamp_seconds: float
     frame: Any
+    segment_index: int = 0
 
 
 def _import_cv2() -> Any:
@@ -60,6 +62,7 @@ class OpenCVVideoDecoder:
         *,
         frame_stride: int = 1,
         target_fps: float | None = None,
+        segments: Sequence[tuple[float, float]] | None = None,
     ) -> Iterator[SampledFrame]:
         if frame_stride < 1:
             raise ValueError("frame_stride must be at least 1")
@@ -78,6 +81,43 @@ class OpenCVVideoDecoder:
             if target_fps is not None:
                 stride = max(1, round(properties.fps / target_fps))
 
+            if segments:
+                decoded_frames = 0
+                for segment_index, (start_seconds, end_seconds) in enumerate(
+                    segments
+                ):
+                    start_frame = max(0, int(start_seconds * properties.fps))
+                    end_frame = (
+                        min(
+                            properties.frame_count - 1,
+                            math.ceil(end_seconds * properties.fps),
+                        )
+                        if properties.frame_count
+                        else math.ceil(end_seconds * properties.fps)
+                    )
+                    if end_frame < start_frame:
+                        continue
+                    capture.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+                    frame_index = start_frame
+                    while frame_index <= end_frame:
+                        ok, frame = capture.read()
+                        if not ok:
+                            break
+                        decoded_frames += 1
+                        if frame_index % stride == 0:
+                            yield SampledFrame(
+                                frame_index=frame_index,
+                                timestamp_seconds=frame_index / properties.fps,
+                                frame=frame,
+                                segment_index=segment_index,
+                            )
+                        frame_index += 1
+                if decoded_frames == 0:
+                    raise VideoDecodeError(
+                        f"Unable to decode requested video segments: {video_path}"
+                    )
+                return
+
             frame_index = 0
             decoded_frames = 0
             while True:
@@ -87,11 +127,14 @@ class OpenCVVideoDecoder:
                         raise VideoDecodeError(f"Unable to decode any frames from video: {video_path}")
                     break
                 decoded_frames += 1
-                if frame_index % stride == 0:
+                timestamp = frame_index / properties.fps
+                segment_index = self._segment_index(timestamp, segments)
+                if frame_index % stride == 0 and segment_index is not None:
                     yield SampledFrame(
                         frame_index=frame_index,
-                        timestamp_seconds=frame_index / properties.fps,
+                        timestamp_seconds=timestamp,
                         frame=frame,
+                        segment_index=segment_index,
                     )
                 frame_index += 1
         finally:
@@ -113,3 +156,15 @@ class OpenCVVideoDecoder:
             height=height,
             duration_seconds=frame_count / fps if frame_count else 0.0,
         )
+
+    @staticmethod
+    def _segment_index(
+        timestamp: float,
+        segments: Sequence[tuple[float, float]] | None,
+    ) -> int | None:
+        if not segments:
+            return 0
+        for index, (start, end) in enumerate(segments):
+            if start <= timestamp <= end:
+                return index
+        return None

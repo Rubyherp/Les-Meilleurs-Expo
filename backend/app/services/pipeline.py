@@ -1,7 +1,7 @@
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 from app.services.detector import PersonDetector
 from app.services.pose import PoseEstimator
@@ -55,7 +55,13 @@ class FramePosePipeline:
         self.grid_columns = grid_columns
         self.grid_rows = grid_rows
 
-    def run(self, video_path: str | Path, progress_callback: ProgressCallback | None = None) -> dict[str, Any]:
+    def run(
+        self,
+        video_path: str | Path,
+        progress_callback: ProgressCallback | None = None,
+        *,
+        segments: Sequence[tuple[float, float]] | None = None,
+    ) -> dict[str, Any]:
         properties = self.decoder.inspect(video_path)
         self._emit(progress_callback, "decoding", 5, 0)
         sampled_frames: list[dict[str, Any]] = []
@@ -69,11 +75,26 @@ class FramePosePipeline:
         )
         self.tracker.reset()
         self.tracker.set_buffer_frames(processed_buffer)
+        decoder_options = {
+            "frame_stride": self.frame_stride,
+            "target_fps": self.target_fps,
+        }
+        if segments:
+            decoder_options["segments"] = segments
         frame_iterator = self.decoder.iter_sampled_frames(
-            video_path, frame_stride=self.frame_stride, target_fps=self.target_fps
+            video_path,
+            **decoder_options,
         )
+        active_segment_index: int | None = None
         try:
             for sampled_count, sampled in enumerate(frame_iterator, start=1):
+                if (
+                    active_segment_index is not None
+                    and sampled.segment_index != active_segment_index
+                ):
+                    self.tracker.reset()
+                    self.tracker.set_buffer_frames(processed_buffer)
+                active_segment_index = sampled.segment_index
                 self._emit(
                     progress_callback,
                     "detecting",
@@ -151,6 +172,11 @@ class FramePosePipeline:
             ],
             "sampled_frames": sampled_frames,
         }
+        if segments:
+            result["sampling"]["segments"] = [
+                {"start_seconds": start, "end_seconds": end}
+                for start, end in segments
+            ]
         # Keep the pipeline contract explicit: task results must be JSON-safe.
         json.dumps(result)
         return result

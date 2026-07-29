@@ -186,3 +186,44 @@ files exist before the first inference; it does not verify or fetch them.
 
 The database currently uses metadata creation at container startup. A future
 phase should add versioned migrations before production deployment.
+
+## Adaptive analysis control
+
+Every analysis now runs through a bounded state machine:
+
+`scout → diagnose → plan → execute → verify → accept / targeted retry / human review`
+
+The scout samples a small number of frames without loading YOLO or MediaPipe
+and measures illumination, blur, and camera motion. The router selects only
+from versioned, approved profiles. A quality auditor then measures person-count
+coverage, confidence, tracking dropout and fragmentation, pose coverage and
+visibility, temporal jitter, and calibration consistency. Failures are grouped
+into time segments. In `active` mode, only those segments are rerun with a
+recovery profile and merged if an independent verifier confirms a measurable
+improvement with no critical regression.
+
+The controller never supplies arbitrary model paths or silently accepts an
+agent-proposed homography. Calibration proposals require stable quadrilateral
+evidence across multiple frames; automatic application is off by default.
+Human calibration is stored with explicit provenance. Each result includes an
+`analysis_control` object with the scout report, quality metrics, reason codes,
+plans, selected profiles, model SHA-256 digests, verification decisions, and
+the final state. The same information is persisted per attempt in
+`analysis_attempts`.
+
+Set `ANALYSIS_CONTROL_MODE` to:
+
+- `disabled` — collect one result without automatic retries.
+- `shadow` — emit the recommended retry plan without executing it.
+- `active` — execute bounded targeted retries.
+
+`ANALYSIS_MAX_ATTEMPTS` and `ANALYSIS_MAX_RETRY_SECONDS` are hard budgets.
+Reference results are cached by media checksum, calibration, dancer count,
+model fingerprints, and control policy. Cache hits never reuse state across
+unrelated videos.
+
+Optional recovery assets are configured with
+`ANALYSIS_RECOVERY_YOLO_MODEL_PATH` and
+`ANALYSIS_RECOVERY_POSE_MODEL_PATH`. If either asset is unavailable, the
+recovery profile safely uses the provisioned baseline asset with denser
+sampling and adjusted tracker/crop parameters.

@@ -4,7 +4,14 @@ from sqlalchemy import text
 
 from app.db.base import Base
 from app.db.session import engine
-from app.models import AnalysisJob, AnalysisResult, AnalysisSession, StoredMedia  # noqa: F401
+from app.models import (  # noqa: F401
+    AnalysisAttempt,
+    AnalysisCache,
+    AnalysisJob,
+    AnalysisResult,
+    AnalysisSession,
+    StoredMedia,
+)
 
 
 async def initialize_database() -> None:
@@ -32,6 +39,15 @@ async def initialize_database() -> None:
             )
             await connection.execute(
                 text("ALTER TABLE analysis_jobs ADD COLUMN IF NOT EXISTS attempt_media_id UUID REFERENCES stored_media(id) ON DELETE SET NULL")
+            )
+            await connection.execute(
+                text(
+                    "ALTER TABLE analysis_jobs ADD COLUMN IF NOT EXISTS "
+                    "expected_dancer_count INTEGER NOT NULL DEFAULT 1"
+                )
+            )
+            await connection.execute(
+                text("ALTER TABLE analysis_jobs ADD COLUMN IF NOT EXISTS control_state JSONB")
             )
 
 

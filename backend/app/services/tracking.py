@@ -261,6 +261,7 @@ class UltralyticsByteTrackAdapter:
         high_confidence: float = 0.25,
         max_persons: int = 5,
         device: str = "cpu",
+        image_size: int = 640,
     ) -> None:
         if not 0 <= confidence <= 1 or not 0 <= high_confidence <= 1:
             raise ValueError("tracker confidence thresholds must be between 0 and 1")
@@ -272,6 +273,7 @@ class UltralyticsByteTrackAdapter:
         self.high_confidence = high_confidence
         self.max_persons = max_persons
         self.device = device
+        self.image_size = image_size
         self._model: Any | None = None
 
     def _load_model(self) -> Any:
@@ -288,6 +290,7 @@ class UltralyticsByteTrackAdapter:
             classes=[0],
             conf=self.confidence,
             device=self.device,
+            imgsz=self.image_size,
             verbose=False,
         )
         return self._parse_result(results, frame.shape[1], frame.shape[0])

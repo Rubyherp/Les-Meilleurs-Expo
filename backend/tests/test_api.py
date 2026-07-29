@@ -45,6 +45,29 @@ def test_upload_returns_task_and_status_endpoint(client):
     }
 
 
+def test_upload_persists_expected_dancer_count_for_routing(client):
+    import asyncio
+    from uuid import UUID
+
+    from app.models import AnalysisJob
+
+    session_id = client.post("/api/v1/sessions").json()["session_id"]
+    upload = client.post(
+        f"/api/v1/sessions/{session_id}/upload",
+        data={"expected_dancer_count": "7"},
+        files={"video": ("group.mp4", b"group payload", "video/mp4")},
+    )
+    assert upload.status_code == 201
+
+    async def load_job():
+        async with client.app.state.test_session_factory() as db:
+            return await db.get(AnalysisJob, UUID(upload.json()["task_id"]))
+
+    job = asyncio.run(load_job())
+    assert job is not None
+    assert job.expected_dancer_count == 7
+
+
 def test_missing_task_returns_404(client):
     response = client.get("/api/v1/tasks/00000000-0000-0000-0000-000000000000")
     assert response.status_code == 404

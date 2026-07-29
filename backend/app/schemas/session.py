@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
@@ -24,12 +25,14 @@ class TaskStatusResponse(BaseModel):
     session_id: UUID
     status: str
     progress: int
+    control: dict | None = None
     error: str | None = None
     result: dict | None = None
 
 
 class CalibrationRequest(BaseModel):
     points: list[tuple[float, float]] = Field(min_length=4, max_length=4)
+    source: Literal["human", "approximate", "agent"] = "human"
 
     @field_validator("points")
     @classmethod
@@ -44,6 +47,8 @@ class CalibrationRequest(BaseModel):
 class CalibrationResponse(BaseModel):
     session_id: UUID
     points: list[tuple[float, float]]
+    source: str = "human"
+    status: str = "verified"
 
 
 class SessionResultResponse(BaseModel):
@@ -62,6 +67,7 @@ class RoleMediaResponse(BaseModel):
 class ComparisonRequest(BaseModel):
     reference_media_id: UUID | None = None
     attempt_media_id: UUID | None = None
+    expected_dancer_count: int = Field(default=1, ge=1, le=24)
 
 
 class ComparisonResponse(BaseModel):

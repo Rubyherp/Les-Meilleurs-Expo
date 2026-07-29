@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { PanResponder, StyleSheet, Text, View } from "react-native";
 import { NormalizedTopDownPosition } from "../models/Phase4Result";
 import {
@@ -66,10 +66,6 @@ export default function CalibrationOverlay({ previewRect, initialCorners, onCorn
     initialCorners ?? DEFAULT_CALIBRATION_CORNERS
   );
 
-  useEffect(() => {
-    onCornersChange?.(corners);
-  }, [corners, onCornersChange]);
-
   return (
     <View style={[styles.wrapper, { width: previewRect.width, height: previewRect.height }]}>
       <View pointerEvents="none" style={styles.guide} />
@@ -79,11 +75,14 @@ export default function CalibrationOverlay({ previewRect, initialCorners, onCorn
           index={index}
           point={point}
           previewRect={previewRect}
-          onMove={(nextPoint) => setCorners((current) => {
-            const next = [...current] as CalibrationCorners;
-            next[index] = nextPoint;
-            return next;
-          })}
+          onMove={(nextPoint) =>
+            setCorners((current) => {
+              const next = [...current] as CalibrationCorners;
+              next[index] = nextPoint;
+              onCornersChange?.(next);
+              return next;
+            })
+          }
         />
       ))}
       <View pointerEvents="none" style={styles.instructionCard}>

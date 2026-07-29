@@ -19,6 +19,9 @@ export default function AnalysisScreen() {
   const sessions = useAppStore((state) => state.sessions);
   const resultsBySession = useAppStore((state) => state.resultsBySession);
   const errorBySession = useAppStore((state) => state.errorBySession);
+  const analysisStageBySession = useAppStore(
+    (state) => state.analysisStageBySession
+  );
   const participantsBySession = useAppStore(
     (state) => state.participantsBySession
   );
@@ -43,6 +46,9 @@ export default function AnalysisScreen() {
   const session = sessions.find((s) => s.id === sessionId);
   const result = sessionId ? resultsBySession[sessionId] : undefined;
   const error = sessionId ? errorBySession[sessionId] : undefined;
+  const analysisStage = sessionId
+    ? analysisStageBySession[sessionId]
+    : undefined;
   const participants = sessionId
     ? participantsBySession[sessionId] ?? []
     : [];
@@ -197,7 +203,12 @@ export default function AnalysisScreen() {
       <ProcessingView
         session={session}
         phase={phase === "failed" || error ? "failed" : phase}
-        errorMessage={error}
+        errorMessage={
+          error ||
+          (analysisStage
+            ? analysisStage.replaceAll("_", " ")
+            : undefined)
+        }
         onRetry={() => {
           logger.ui.press("Retry analysis");
           runAnalysis(true);

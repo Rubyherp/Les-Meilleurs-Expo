@@ -1,8 +1,5 @@
 import { DanceSession } from "../models/DanceSession";
 import { AnalysisResult } from "../models/AnalysisResult";
-import {
-  DEFAULT_CALIBRATION_CORNERS,
-} from "../models/Calibration";
 import { normalizePhase4Result } from "../models/Phase4Result";
 import { normalizePhase5Result, Phase5ResultJson } from "../models/Phase5Result";
 import { mockAnalyze } from "./mockAnalysis";
@@ -59,12 +56,18 @@ export async function analyzeSession(
 
   // ═══ Mode B: reference + attempt comparison ═════════════════════════════
   if (apiBaseUrl && session.referenceVideoUri && session.attemptVideoUri) {
+    if (!session.calibrationCorners) {
+      throw new Error(
+        "Stage calibration is required for a reference comparison. Record with the stage overlay and confirm its four corners."
+      );
+    }
     const remoteSession = await createRemoteSession();
     options?.onRemoteSession?.(remoteSession.session_id);
 
     await submitCalibration(
       remoteSession.session_id,
-      session.calibrationCorners ?? DEFAULT_CALIBRATION_CORNERS
+      session.calibrationCorners,
+      session.calibrationSource ?? "approximate"
     );
 
     const [refUpload, attUpload] = await Promise.all([
@@ -75,12 +78,14 @@ export async function analyzeSession(
     const comparison = await createComparison(
       remoteSession.session_id,
       refUpload.media_id,
-      attUpload.media_id
+      attUpload.media_id,
+      session.expectedDancerCount
     );
     options?.onRemoteTask?.(comparison.task_id);
 
     const task = await pollRemoteTask(comparison.task_id, {
-      onStatus: (status) => options?.onRemoteStatus?.(status.status),
+      onStatus: (status) =>
+        options?.onRemoteStatus?.(status.control?.stage ?? status.status),
     });
 
     const remoteResults = await getRemoteResults<Phase5ResultJson>(remoteSession.session_id);
@@ -109,14 +114,22 @@ export async function analyzeSession(
   if (apiBaseUrl && session.attemptVideoUri) {
     const remoteSession = await createRemoteSession();
     options?.onRemoteSession?.(remoteSession.session_id);
-    await submitCalibration(
+    if (session.calibrationCorners) {
+      await submitCalibration(
+        remoteSession.session_id,
+        session.calibrationCorners,
+        session.calibrationSource ?? "approximate"
+      );
+    }
+    const upload = await uploadAttemptVideo(
       remoteSession.session_id,
-      session.calibrationCorners ?? DEFAULT_CALIBRATION_CORNERS
+      session.attemptVideoUri,
+      { expectedDancerCount: session.expectedDancerCount }
     );
-    const upload = await uploadAttemptVideo(remoteSession.session_id, session.attemptVideoUri);
     options?.onRemoteTask?.(upload.task_id);
     const task = await pollRemoteTask(upload.task_id, {
-      onStatus: (status) => options?.onRemoteStatus?.(status.status),
+      onStatus: (status) =>
+        options?.onRemoteStatus?.(status.control?.stage ?? status.status),
     });
     const remoteResults = await getRemoteResults(remoteSession.session_id);
     const phase4 = normalizePhase4Result(remoteResults.metadata);

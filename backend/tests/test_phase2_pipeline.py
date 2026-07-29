@@ -60,6 +60,20 @@ def test_frame_sampling_reports_properties_and_stride(tiny_video):
     assert [frame.timestamp_seconds for frame in frames] == pytest.approx([0, 0.2, 0.4])
 
 
+def test_segment_sampling_seeks_to_requested_window(tiny_video):
+    decoder = OpenCVVideoDecoder()
+    frames = list(
+        decoder.iter_sampled_frames(
+            tiny_video,
+            target_fps=10,
+            segments=((0.2, 0.4),),
+        )
+    )
+
+    assert [frame.frame_index for frame in frames] == [2, 3, 4]
+    assert {frame.segment_index for frame in frames} == {0}
+
+
 def test_pipeline_emits_progress_and_json_serializable_result(tiny_video):
     events: list[ProgressEvent] = []
     pipeline = FramePosePipeline(
