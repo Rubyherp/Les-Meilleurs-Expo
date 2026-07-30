@@ -84,6 +84,14 @@ class TimingContext:
     pulse_consistency: float = 0.0
     group_sync_score: float | None = None
 
+    # Audio beat detection fields
+    tempo_bpm: float = 0.0
+    beat_times: list[float] = field(default_factory=list)
+    beat_count: int = 0
+    mean_beat_lag: float = 0.0
+    beat_consistency: float = 0.0
+    has_audio: bool = False
+
 
 @dataclass
 class FormationContext:
@@ -379,6 +387,77 @@ def _movement_timing(frames: list[dict[str, Any]], *, is_group: bool) -> TimingC
     )
 
 
+def _compute_beat_alignment(
+    frames: list[dict[str, Any]], beat_times: list[float], *, is_group: bool
+) -> tuple[float, float, int]:
+    """Compute how well movement peaks align to detected audio beats.
+
+    For each beat timestamp, finds the nearest movement energy peak
+    and measures the time offset.
+
+    Returns:
+        (mean_lag_seconds, beat_consistency_0_1, beat_count)
+    """
+    if not beat_times or not frames:
+        return 0.0, 0.0, 0
+
+    # Build movement energy curve (same as _movement_timing)
+    previous: dict[int, tuple[float, float, float]] = {}
+    energy_samples: list[tuple[float, float]] = []
+
+    for index, frame in enumerate(frames):
+        timestamp = _frame_timestamp(frame, float(index))
+        speeds: list[float] = []
+        for track in frame.get("tracks", []):
+            track_id = track.get("track_id")
+            point = _observed_point(track)
+            if track_id is None or point is None:
+                continue
+            prior = previous.get(int(track_id))
+            if prior is not None:
+                elapsed = timestamp - prior[2]
+                if elapsed > 0:
+                    speeds.append(math.hypot(point[0] - prior[0], point[1] - prior[1]) / elapsed)
+            previous[int(track_id)] = (point[0], point[1], timestamp)
+        if speeds:
+            energy_samples.append((timestamp, statistics.fmean(speeds)))
+
+    if len(energy_samples) < 2 or not beat_times:
+        return 0.0, 0.0, 0
+
+    # Find movement peaks (same approach as _movement_timing)
+    energies = [s[1] for s in energy_samples]
+    mean_energy = statistics.fmean(energies)
+    peak_times = [
+        energy_samples[i][0]
+        for i in range(1, len(energy_samples) - 1)
+        if energies[i] >= energies[i - 1]
+        and energies[i] > energies[i + 1]
+        and energies[i] >= mean_energy
+    ]
+
+    if not peak_times:
+        return 0.0, 0.0, 0
+
+    # For each beat, find nearest movement peak
+    lags: list[float] = []
+    for beat in beat_times:
+        closest = min(peak_times, key=lambda p: abs(p - beat))
+        lag = abs(closest - beat)
+        if lag < 0.5:  # only count beats within 0.5s of a movement peak
+            lags.append(lag)
+
+    if not lags:
+        return 0.0, 0.0, len(beat_times)
+
+    mean_lag = statistics.fmean(lags)
+    # Consistency: ratio of beats that aligned well (< 0.2s) vs total beats
+    aligned_count = sum(1 for lag in lags if lag < 0.2)
+    consistency = aligned_count / len(beat_times)
+
+    return round(mean_lag, 3), round(consistency, 3), len(beat_times)
+
+
 def _extract_timing(
     result: dict[str, Any],
     analysis_result: dict[str, Any],
@@ -388,6 +467,17 @@ def _extract_timing(
 ) -> TimingContext:
     frames = analysis_result.get("sampled_frames") or []
     baseline = _movement_timing(frames, is_group=is_group)
+
+    # ---- Beat alignment from audio (new) ----
+    audio_info = result.get("audio") or {}
+    beat_times_raw = audio_info.get("beats") or []
+    if beat_times_raw:
+        mean_lag, beat_consistency, beat_count = _compute_beat_alignment(
+            frames, beat_times_raw, is_group=is_group
+        )
+    else:
+        mean_lag, beat_consistency, beat_count = 0.0, 0.0, 0
+
     if mode != "comparison":
         return baseline
 
@@ -434,6 +524,12 @@ def _extract_timing(
         offset_spread_seconds=round(spread, 3),
         pulse_consistency=round(max(0.0, 1.0 - min(1.0, spread / 0.5)), 3),
         group_sync_score=round(group_sync_score, 3) if group_sync_score is not None else None,
+        tempo_bpm=audio_info.get("tempo", 0.0) or 0.0,
+        beat_times=beat_times_raw,
+        beat_count=beat_count,
+        mean_beat_lag=mean_lag,
+        beat_consistency=beat_consistency,
+        has_audio=bool(beat_times_raw),
     )
 
 

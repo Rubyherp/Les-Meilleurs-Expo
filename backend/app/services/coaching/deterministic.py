@@ -280,6 +280,45 @@ def _timing_agent(ctx: TimingContext) -> CoachPhase:
             )
             suggestions.append("Choose shared count landmarks for starts, stops, and direction changes.")
 
+    # ---- Beat-aware timing feedback (new) ----
+    if ctx.has_audio and ctx.beat_count > 0:
+        if ctx.beat_consistency >= 0.7:
+            strengths.append(
+                f"Movement peaks aligned with {ctx.beat_consistency:.0%} of the detected beats "
+                f"(tempo: {ctx.tempo_bpm:.0f} BPM)."
+            )
+        elif ctx.beat_consistency >= 0.4:
+            suggestions.append(
+                "Practice hitting the main accents on the beat — "
+                "about half the movement peaks lined up with the music."
+            )
+        else:
+            issues.append(
+                CoachIssue(
+                    description=(
+                        f"Only {ctx.beat_consistency:.0%} of movement peaks "
+                        f"aligned with the music beats (tempo: {ctx.tempo_bpm:.0f} BPM)."
+                    ),
+                    severity="medium",
+                    category="beat_alignment",
+                )
+            )
+            suggestions.append(
+                "Count the music out loud first, then match your accents to the downbeats."
+            )
+
+        if ctx.mean_beat_lag > 0.25:
+            issues.append(
+                CoachIssue(
+                    description=(
+                        f"Movement was about {ctx.mean_beat_lag:.2f}s off from the nearest beat."
+                    ),
+                    severity="medium",
+                    category="beat_lag",
+                )
+            )
+            suggestions.append("Try tapping along with the beat before dancing full-out.")
+
     confidence = min(1.0, 0.45 + min(ctx.sample_count, 30) / 60)
     if not ctx.has_reference:
         confidence = min(confidence, 0.75)
@@ -292,6 +331,11 @@ def _timing_agent(ctx: TimingContext) -> CoachPhase:
             f"Reference timing offset averaged {ctx.average_absolute_offset_seconds:.2f}s."
             if ctx.has_reference
             else f"Movement pulse consistency measured {ctx.pulse_consistency:.0%} without a reference."
+        )
+        + (
+            f" Beat alignment: {ctx.beat_consistency:.0%} at {ctx.tempo_bpm:.0f} BPM."
+            if ctx.has_audio
+            else ""
         ),
         strengths=strengths,
         issues=issues,
@@ -327,6 +371,27 @@ def _timing_agent(ctx: TimingContext) -> CoachPhase:
                 )
             ]
             if ctx.group_sync_score is not None
+            else []
+        )
+        + (
+            [
+                CoachEvidence(
+                    metric="detected_tempo_bpm",
+                    value=ctx.tempo_bpm,
+                    unit="bpm",
+                ),
+                CoachEvidence(
+                    metric="beat_alignment_consistency",
+                    value=ctx.beat_consistency,
+                    unit="ratio",
+                ),
+                CoachEvidence(
+                    metric="mean_beat_lag",
+                    value=ctx.mean_beat_lag,
+                    unit="seconds",
+                ),
+            ]
+            if ctx.has_audio
             else []
         ),
         confidence=round(confidence, 2),

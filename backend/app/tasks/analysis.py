@@ -219,7 +219,16 @@ async def _run_pipeline_for_media(
                     (segment.start_seconds, segment.end_seconds)
                     for segment in segments
                 ]
-            return run(temporary_file.name, callback, **kwargs)
+            # Extract audio beats before running the vision pipeline
+            try:
+                from app.services.audio import extract_beats
+                audio_info = extract_beats(temporary_file.name)
+            except Exception:
+                audio_info = {"tempo": 0.0, "beats": [], "duration": 0.0, "error": "extraction_failed"}
+
+            result = run(temporary_file.name, callback, **kwargs)
+            result["audio"] = audio_info
+            return result
 
         controller = AdaptiveAnalysisController(
             settings, expected_dancer_count=expected_dancer_count

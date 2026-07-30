@@ -15,6 +15,7 @@ from app.services.coaching.context import (
     ObservationContext,
     TimingContext,
     TrackingContext,
+    _compute_beat_alignment,
     extract_coaching_context,
 )
 from app.services.coaching.deterministic import (
@@ -294,6 +295,105 @@ def test_low_observation_quality_gates_other_agents():
     assert report.agents[1].available is False
     assert report.coordination_notes
     assert "Observation Agent" in report.coordination_notes[0]
+
+
+# ── Beat alignment (audio) ───────────────────────────────────────────
+
+def test_timing_agent_detects_good_beat_alignment():
+    """Timing agent reports strength when movement aligns with audio beats."""
+    agent = _timing_agent(
+        TimingContext(
+            available=True,
+            sample_count=30,
+            pulse_consistency=0.8,
+            has_audio=True,
+            beat_count=16,
+            beat_consistency=0.85,
+            tempo_bpm=120,
+            mean_beat_lag=0.05,
+            beat_times=[t * 0.5 for t in range(16)],
+        )
+    )
+    assert agent.available is True
+    assert any("aligned" in s.lower() for s in agent.strengths)
+    beat_evidence = [e for e in agent.evidence if e.metric == "beat_alignment_consistency"]
+    assert len(beat_evidence) == 1
+    assert beat_evidence[0].value == 0.85
+
+
+def test_timing_agent_warns_poor_beat_alignment():
+    """Timing agent flags poor beat alignment as an issue."""
+    agent = _timing_agent(
+        TimingContext(
+            available=True,
+            sample_count=30,
+            pulse_consistency=0.8,
+            has_audio=True,
+            beat_count=16,
+            beat_consistency=0.3,
+            tempo_bpm=120,
+            mean_beat_lag=0.4,
+            beat_times=[t * 0.5 for t in range(16)],
+        )
+    )
+    assert any("aligned" in i.description.lower() for i in agent.issues)
+    lag_issues = [i for i in agent.issues if "off" in i.description or "lag" in str(i.category)]
+    assert len(lag_issues) >= 1
+    beatt_evidence = [e for e in agent.evidence if e.metric == "detected_tempo_bpm"]
+    assert len(beatt_evidence) == 1
+    assert beatt_evidence[0].value == 120
+
+
+def test_timing_agent_no_audio_falls_back_to_pulse():
+    """Without audio data, timing agent uses movement-only pulse (no beat section)."""
+    agent = _timing_agent(
+        TimingContext(
+            available=True,
+            sample_count=30,
+            pulse_consistency=0.8,
+            has_audio=False,
+            beat_count=0,
+            beat_consistency=0.0,
+            tempo_bpm=0.0,
+            mean_beat_lag=0.0,
+        )
+    )
+    assert agent.available is True
+    assert all("beat" not in s.lower() for s in agent.strengths)
+    beat_evidence = [e for e in agent.evidence if e.metric.startswith("detected_tempo")]
+    assert len(beat_evidence) == 0
+
+
+def test_compute_beat_alignment_with_aligned_peaks():
+    """_compute_beat_alignment returns high consistency when peaks match beats."""
+    # Build frames with clear movement pulses — large position jumps every 5 frames
+    frames = []
+    for i in range(30):
+        # Every 5 frames the dancer moves significantly
+        if i % 5 == 0:
+            x = float(i * 50)  # big jump
+        else:
+            x = float(i * 50 - 45)  # stays nearly still
+        frames.append({
+            "tracks": [{
+                "track_id": 1,
+                "bbox_source": "observed",
+                "top_down": {"x": x, "y": 10.0},
+            }]
+        })
+
+    # Beats at frames 5, 10, 15 — aligned with movement peaks
+    beat_times = [2.5, 5.0, 7.5]
+    mean_lag, consistency, count = _compute_beat_alignment(frames, beat_times, is_group=False)
+    assert count == 3
+    assert isinstance(mean_lag, float)
+    assert isinstance(consistency, float)
+
+
+def test_compute_beat_alignment_empty_frames():
+    """Empty frames or no beats returns zeros."""
+    assert _compute_beat_alignment([], [], is_group=False) == (0.0, 0.0, 0)
+    assert _compute_beat_alignment([{"tracks": [{"track_id": 1}]}], [], is_group=False) == (0.0, 0.0, 0)
 
 
 def test_report_serializes_agent_contract_and_evidence():
