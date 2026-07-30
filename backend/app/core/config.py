@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     tracker_buffer_seconds: float = Field(default=2.0, ge=0)
     tracker_buffer_frames: int | None = Field(default=None, ge=0)
     tracker_iou_threshold: float = Field(default=0.1, ge=0, le=1)
-    tracker_high_confidence: float = Field(default=0.25, ge=0, le=1)
+    tracker_high_confidence: float = Field(default=0.40, ge=0, le=1)
     tracker_low_confidence: float = Field(default=0.1, ge=0, le=1)
     grid_columns: int = Field(default=10, ge=1)
     grid_rows: int = Field(default=10, ge=1)

@@ -41,6 +41,7 @@ class FramePosePipeline:
         projector: HomographyProjector | None = None,
         grid_columns: int = 10,
         grid_rows: int = 10,
+        max_tracks: int | None = None,
     ) -> None:
         self.decoder = decoder
         self.detector = detector
@@ -54,6 +55,7 @@ class FramePosePipeline:
         self.projector = projector
         self.grid_columns = grid_columns
         self.grid_rows = grid_rows
+        self.max_tracks = max_tracks
 
     def run(
         self,
@@ -103,6 +105,12 @@ class FramePosePipeline:
                 )
                 self._emit(progress_callback, "tracking", min(45, 10 + int(sampled.frame_index / total * 35)), sampled_count)
                 tracks = self.tracker.track(sampled.frame, sampled.frame_index)
+                if self.max_tracks is not None and len(tracks) > self.max_tracks:
+                    tracks = sorted(
+                        tracks,
+                        key=lambda t: getattr(t, "confidence", 0) or 0,
+                        reverse=True,
+                    )[: self.max_tracks]
                 serialized_tracks: list[dict[str, Any]] = []
                 for track in tracks:
                     self._emit(

@@ -178,6 +178,7 @@ def build_pipeline(
         projector=projector,
         grid_columns=settings.grid_columns,
         grid_rows=settings.grid_rows,
+        max_tracks=expected_dancer_count,
     )
 
 
