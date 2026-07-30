@@ -48,7 +48,7 @@ export default function CreateModeAScreen() {
     if (!permission.granted) return;
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+      mediaTypes: ['videos'],
     });
     if (!result.canceled && result.assets.length > 0) {
       setVideoUri(result.assets[0].uri);

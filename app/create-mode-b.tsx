@@ -72,7 +72,7 @@ export default function CreateModeBScreen() {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) return;
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        mediaTypes: ['videos'],
       });
       if (!result.canceled && result.assets.length > 0) {
         const uri = result.assets[0].uri;

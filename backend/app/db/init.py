@@ -49,6 +49,15 @@ async def initialize_database() -> None:
             await connection.execute(
                 text("ALTER TABLE analysis_jobs ADD COLUMN IF NOT EXISTS control_state JSONB")
             )
+            await connection.execute(
+                text(
+                    "DO $$ BEGIN "
+                    "IF EXISTS (SELECT 1 FROM information_schema.columns "
+                    "WHERE table_name='analysis_results' AND column_name='metadata') THEN "
+                    "ALTER TABLE analysis_results RENAME COLUMN metadata TO result_metadata; "
+                    "END IF; END $$"
+                )
+            )
 
 
 if __name__ == "__main__":
