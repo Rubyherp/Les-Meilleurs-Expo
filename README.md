@@ -70,11 +70,6 @@ configured, each specialist becomes an independent LLM call:
 This architecture means the coaching team degrades gracefully: LLMs improve
 language quality and depth, but the system is fully functional without them.
 
-### Try it now with demo data
-No video needed. Two seeded demo sessions show real analysis results:
-- **Preview your first trend** — a single-take formation view
-- **Compare two takes** — side-by-side DTW alignment and scoring
-
 ## Screens
 
 - **Practice** — your home tab. See session history, start a new session.
@@ -140,36 +135,6 @@ Place these in `backend/models/` (mounted into the Docker container):
 |------|---------|
 | `yolo11n.pt` | `0ebbc80d4a7680d14987a577cd21342b65ecfd94632bd9a8da63ae6417644ee1` |
 | `pose_landmarker_lite.task` | `59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a` |
-
-## Seeding demo data
-
-The app fetches pre-processed analysis results for two demo sessions:
-
-| Demo | Mode | Backend session | Video |
-|------|------|-----------------|-------|
-| Preview your first trend | A — Formation | `ddd418e0-…` | `reference.mov` (18.6s, 1 dancer) |
-| Compare two takes | B — Comparison | `bae46a8b-…` | `reference.mov` vs `user-upload.mov` |
-
-To re-run analysis against new videos:
-
-```sh
-# Mode A — single video
-SESSION=$(curl -s -X POST http://localhost:8000/api/v1/sessions | jq -r .session_id)
-curl -s -X POST "http://localhost:8000/api/v1/sessions/$SESSION/upload" \
-  -F "video=@your-video.mp4;type=video/mp4"
-
-# Mode B — comparison
-curl -s -X POST "http://localhost:8000/api/v1/sessions/$SESSION/calibration" \
-  -H "Content-Type: application/json" \
-  -d '{"points":[[0.08,0.1],[0.92,0.1],[0.92,0.9],[0.08,0.9]]}'
-curl -s -X POST "http://localhost:8000/api/v1/sessions/$SESSION/reference" \
-  -F "video=@reference.mov;type=video/quicktime"
-curl -s -X POST "http://localhost:8000/api/v1/sessions/$SESSION/attempt" \
-  -F "video=@attempt.mov;type=video/quicktime"
-curl -s -X POST "http://localhost:8000/api/v1/sessions/$SESSION/compare" \
-  -H "Content-Type: application/json" \
-  -d '{"reference_media_id":"<REF_ID>","attempt_media_id":"<ATT_ID>"}'
-```
 
 ### Coaching via API
 
