@@ -18,16 +18,57 @@ attempt. The app aligns both performances in time and scores how closely you
 match. See which sections you've got and which need more reps.
 
 ### Get AI coaching
-After analyzing, hit "Run coaching agents" to receive data-grounded feedback:
 
-| Agent      | Solo | Group | What it tells you |
-|------------|------|-------|-------------------|
-| Observation| ✓    | ✓     | Visibility, pose readability, and track quality |
-| Timing     | ✓    | ✓     | Whether you're on beat with the reference |
-| Formation  | —    | ✓     | Relative spacing, crowding, and spatial match |
+After analyzing, hit "Run coaching agents" to receive a full report produced by
+a team of specialist agents. Each agent owns a narrow domain and delivers
+data-grounded feedback with strengths, issues, suggestions, evidence, and a
+confidence score.
 
-Coaching works **without any API key** — it reads the analysis results
-directly. Optionally plug in an LLM for richer reports.
+Three specialists are available:
+
+| Agent | Solo | Group | Domain |
+|-------|------|-------|--------|
+| **Observation** | ✓ | ✓ | Camera visibility, pose readability, occlusion, tracking reliability. |
+| **Timing** | ✓ | ✓ | Reference timing offset (Mode B), movement-pulse consistency, beat alignment to audio, group synchronization. |
+| **Formation** | — | ✓ | Relative dancer spacing, crowding rate, spatial drift, reference formation match. |
+
+#### How the coaching team works
+
+The **orchestrator** (`run_coaching`) coordinates the agents as a gated pipeline:
+
+1. **Context extraction** — structured metrics are pulled from the analysis
+   result: detection coverage, pose rates, occlusion events, movement peaks,
+   pair distances, DTW offsets, beat alignment, and more.
+2. **Observation gates the team** — the Observation Agent runs first. If it
+   can't verify video quality (confidence < 0.55, or a high-severity visibility
+   / tracking / group-visibility issue exists), Timing and Formation are
+   paused with a clear reason. This prevents unreliable data from producing
+   misleading feedback.
+3. **Remaining agents run in parallel** — if Observation passes, Timing (and
+   Formation for groups) execute concurrently.
+
+#### Deterministic-first, LLM-enhanced
+
+Coaching works **without any API key**. The deterministic path uses pure
+functions that inspect the analysis metrics directly — no model calls, no
+hallucinations, always reproducible.
+
+Optionally set an LLM API key in `backend/.env` to enhance reports. When
+configured, each specialist becomes an independent LLM call:
+
+1. The orchestrator sends each agent a compact system prompt + structured
+   context string (the same metrics the deterministic path uses).
+2. Each agent responds with a JSON object: summary, strengths, issues,
+   suggestions, and confidence.
+3. If an LLM call fails, times out, or returns invalid JSON, the agent
+   **falls back to its deterministic counterpart** transparently. Users never
+   see a broken report.
+4. The orchestrator merges all agent outputs into a single `CoachingReport`
+   with per-agent scores, evidence, coordination notes, and an overall
+   summary.
+
+This architecture means the coaching team degrades gracefully: LLMs improve
+language quality and depth, but the system is fully functional without them.
 
 ### Try it now with demo data
 No video needed. Two seeded demo sessions show real analysis results:
