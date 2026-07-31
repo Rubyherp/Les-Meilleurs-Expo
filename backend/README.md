@@ -238,8 +238,9 @@ Generic `LLM_API_KEY` is a deprecated OpenAI fallback.
 - OpenAI Agents SDK coordinates typed Observation, Timing, Formation, and
   synthesis outputs. Deterministic measurements and the observation gate remain
   authoritative; tracing excludes sensitive payloads by default.
-- Agnes reviews at most three deterministically selected, resized JPEG frames.
-  Raw uploads and permanent media URLs are never sent.
+- Agnes reviews one deterministically selected, resized JPEG evidence moment at
+  a time. Retryable capacity failures receive one bounded `agnes-2.0-flash`
+  compatibility attempt. Raw uploads and permanent media URLs are never sent.
 - Zo uses the documented `POST /zo/ask` structured-output endpoint. Report save
   and reminder creation are separate operations; reminders require an explicit
   timestamp and timezone.

@@ -20,9 +20,16 @@ async def review_evidence_with_agnes(
             provider="agnes", product="visual-evidence", model=settings.agnes_model or None,
             status="not_configured", fallback_reason="missing_configuration",
         )
+    if settings.agnes_max_evidence_moments == 0:
+        return moments, IntegrationRun(
+            provider="agnes", product="visual-evidence", model=settings.agnes_model,
+            status="fallback", fallback_reason="disabled_by_evidence_limit",
+        )
 
     started = datetime.now(timezone.utc)
-    semaphore = asyncio.Semaphore(min(3, max(1, settings.agnes_max_evidence_moments)))
+    # Agnes capacity is variable; serialize calls to avoid burst-driven 503s.
+    semaphore = asyncio.Semaphore(1)
+    selected = moments[: settings.agnes_max_evidence_moments]
 
     async def one(moment: EvidenceMoment) -> tuple[EvidenceMoment, IntegrationRun | None]:
         images = await asyncio.to_thread(prepare_evidence_images, moment, media, settings)
@@ -49,7 +56,7 @@ async def review_evidence_with_agnes(
                 ))
         return moment.model_copy(update={"frame_assets": assets, "visual_review": review}), moment_client.last_run
 
-    reviewed = await asyncio.gather(*(one(moment) for moment in moments[:3]))
+    reviewed = await asyncio.gather(*(one(moment) for moment in selected))
     output = [item[0] for item in reviewed]
     runs = [item[1] for item in reviewed if item[1] is not None]
     completed = sum(run.status == "completed" for run in runs)
@@ -63,5 +70,5 @@ async def review_evidence_with_agnes(
         provider="agnes", product="visual-evidence", model=settings.agnes_model,
         status=status, started_at=started, completed_at=datetime.now(timezone.utc),
         fallback_reason=reason,
-        metadata={"selected_count": len(moments), "reviewed_count": completed},
+        metadata={"selected_count": len(selected), "reviewed_count": completed},
     )

@@ -161,7 +161,8 @@ GMI_MODEL=openai/gpt-5.4-nano
 ```
 
 OpenAI uses typed specialist agents after a deterministic observation gate.
-Agnes receives at most three derived JPEG evidence moments, never a raw video.
+Agnes reviews one selected derived JPEG evidence moment at a time, never a raw
+video. Retryable capacity failures get one bounded compatibility-model attempt.
 Zo export is an explicit private/unlisted action; reminder creation is separate
 and opt-in. Missing or failed providers leave deterministic coaching usable and
 appear as `not_configured`, `fallback`, or `failed` in report provenance.

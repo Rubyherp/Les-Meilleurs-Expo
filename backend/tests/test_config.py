@@ -55,8 +55,8 @@ def test_openai_timeout_positive():
 
 
 def test_agnes_timeout_positive():
-    s = Settings(agnes_timeout_seconds=45.0)
-    assert s.agnes_timeout_seconds == 45.0
+    s = Settings(agnes_timeout_seconds=15.0)
+    assert s.agnes_timeout_seconds == 15.0
 
     with pytest.raises(ValidationError):
         Settings(agnes_timeout_seconds=-1.0)
@@ -108,6 +108,18 @@ def test_openai_model_default():
 def test_agnes_model_default():
     s = Settings()
     assert s.agnes_model == "agnes-2.5-flash"
+    assert s.agnes_fallback_model == "agnes-2.0-flash"
+    assert s.agnes_max_retries == 1
+    assert s.agnes_max_evidence_moments == 1
+
+
+def test_agnes_retry_and_output_bounds():
+    with pytest.raises(ValidationError):
+        Settings(agnes_max_retries=3)
+    with pytest.raises(ValidationError):
+        Settings(agnes_retry_base_seconds=-0.1)
+    with pytest.raises(ValidationError):
+        Settings(agnes_max_output_tokens=32)
 
 
 # ── GMI settings ──────────────────────────────────────────────────────────

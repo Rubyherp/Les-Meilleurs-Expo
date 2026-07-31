@@ -89,7 +89,7 @@ async def smoke_agnes(settings: Settings) -> bool:
     _status(
         "agnes",
         run.status if run else "failed",
-        model=settings.agnes_model,
+        model=run.model if run else settings.agnes_model,
         latency_ms=run.latency_ms if run else None,
         reason=reason,
     )

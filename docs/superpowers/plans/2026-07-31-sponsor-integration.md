@@ -15,9 +15,11 @@
   vision review, OpenAI Agents SDK specialists and synthesis, Zo `/zo/ask`
   structured export with explicit reminder isolation, Expo normalization,
   evidence cards, timeline seeking, provenance, and export UI.
-- Verified locally: 195 backend tests, Python compilation, TypeScript typecheck,
+- Verified locally: 199 backend tests, Python compilation, TypeScript typecheck,
   and Docker Compose configuration. Live smoke checks completed for OpenAI, Zo,
-  and GMI Serverless Inference; Agnes remains provider-degraded (`503`).
+  and GMI Serverless Inference. Agnes has sequential bounded requests, tolerant
+  JSON parsing, and a compatibility-model retry, but its live service remains
+  provider-degraded (`503`/timeout); deterministic coaching remains available.
 - Still requires real infrastructure only for the optional GMI CUDA image/runtime
   probe and a deployed Zo-hosted artifact visible from the demo device. Do not
   claim GPU Compute success unless that separate runtime probe passes.

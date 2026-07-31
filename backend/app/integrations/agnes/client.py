@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
+import random
 import re
 import time
 from typing import Protocol
@@ -24,11 +26,57 @@ is occluded, state that it is unverifiable. Return JSON with summary,
 visible_differences, limitations, and confidence. Keep the summary under two
 sentences."""
 
-_PROHIBITED = re.compile(
+_SENSITIVE = re.compile(
     r"\b(identity|identified as|diagnos(?:e|is)|injur(?:y|ed)|emotion|angry|sad|"
     r"gender|ethnicity|race|pregnan|disabled|medical condition|age is)\b",
     re.IGNORECASE,
 )
+_SAFE_LIMITATION = re.compile(
+    r"\b(cannot|can't|should not|not possible|unable to)\b.{0,40}\b"
+    r"(infer\w*|determin\w*|assess\w*|verif\w*|identif\w*|diagnos\w*)\b|"
+    r"\b(unverifiable|unknown)\b",
+    re.IGNORECASE,
+)
+_RETRYABLE_STATUS = {429, 500, 502, 503, 520}
+
+
+class _AttemptError(Exception):
+    def __init__(
+        self, reason: str, *, retryable: bool, retry_after: float | None = None
+    ) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.retryable = retryable
+        self.retry_after = retry_after
+
+
+def _decode_json(raw: str) -> dict:
+    value = raw.strip()
+    if value.startswith("```") and value.endswith("```"):
+        value = value[3:-3].strip()
+        if value.lower().startswith("json"):
+            value = value[4:].lstrip()
+    decoded = json.loads(value)
+    if not isinstance(decoded, dict):
+        raise TypeError("expected_object")
+    return decoded
+
+
+def _retry_after_seconds(response: httpx.Response) -> float | None:
+    value = response.headers.get("retry-after")
+    if value is None:
+        return None
+    try:
+        return max(0.0, min(5.0, float(value)))
+    except ValueError:
+        return None
+
+
+def _contains_prohibited_claim(parts: list[str]) -> bool:
+    for part in parts:
+        if _SENSITIVE.search(part) and not _SAFE_LIMITATION.search(part):
+            return True
+    return False
 
 
 class VisualEvidenceProvider(Protocol):
@@ -75,13 +123,74 @@ class AgnesClient:
             timeout=self.settings.agnes_timeout_seconds
         )
         close_client = self._http_client is None
+        attempted_models: list[str] = []
+        last_error = _AttemptError("request_not_attempted", retryable=False)
+        try:
+            for attempt in range(self.settings.agnes_max_retries + 1):
+                model = self.settings.agnes_model
+                if attempt > 0 and self.settings.agnes_fallback_model:
+                    model = self.settings.agnes_fallback_model
+                attempted_models.append(model)
+                try:
+                    review, request_id, served_model = await self._request(
+                        client, moment, images, model
+                    )
+                    self.last_run = IntegrationRun(
+                        provider="agnes", product="visual-evidence", model=served_model,
+                        status="completed",
+                        latency_ms=int((time.monotonic() - started) * 1000),
+                        request_id=request_id,
+                        metadata={
+                            "evidence_id": moment.id,
+                            "image_count": len(images),
+                            "attempt_count": len(attempted_models),
+                            "attempted_models": attempted_models,
+                            "fallback_model_used": model != self.settings.agnes_model,
+                        },
+                    )
+                    return review
+                except _AttemptError as exc:
+                    last_error = exc
+                    if not exc.retryable or attempt >= self.settings.agnes_max_retries:
+                        break
+                    base = self.settings.agnes_retry_base_seconds * (2 ** attempt)
+                    delay = exc.retry_after if exc.retry_after is not None else base
+                    delay += random.uniform(0.0, base * 0.25)
+                    if delay > 0:
+                        await asyncio.sleep(min(5.0, delay))
+
+            self.last_run = IntegrationRun(
+                provider="agnes", product="visual-evidence",
+                model=attempted_models[-1] if attempted_models else self.settings.agnes_model,
+                status="failed", latency_ms=int((time.monotonic() - started) * 1000),
+                fallback_reason=last_error.reason,
+                metadata={
+                    "evidence_id": moment.id,
+                    "image_count": len(images),
+                    "attempt_count": len(attempted_models),
+                    "attempted_models": attempted_models,
+                },
+            )
+            return None
+        finally:
+            if close_client:
+                await client.aclose()
+
+    async def _request(
+        self,
+        client: httpx.AsyncClient,
+        moment: EvidenceMoment,
+        images: list[PreparedEvidenceImage],
+        model: str,
+    ) -> tuple[VisualReview, str | None, str]:
         try:
             response = await client.post(
                 self.settings.agnes_base_url.rstrip("/") + "/chat/completions",
                 headers={"Authorization": f"Bearer {self.settings.agnes_api_key}"},
                 json={
-                    "model": self.settings.agnes_model,
+                    "model": model,
                     "temperature": 0.1,
+                    "max_tokens": self.settings.agnes_max_output_tokens,
                     "response_format": {"type": "json_object"},
                     "messages": [
                         {"role": "system", "content": _SYSTEM_PROMPT},
@@ -90,49 +199,41 @@ class AgnesClient:
                 },
             )
             response.raise_for_status()
-            request_id = response.headers.get("x-request-id")
-            raw = response.json()["choices"][0]["message"]["content"]
-            parsed = AgnesStructuredReview.model_validate(json.loads(raw))
-            combined = " ".join(
-                [parsed.summary, *parsed.visible_differences, *parsed.limitations]
-            )
-            if _PROHIBITED.search(combined):
-                raise ValueError("prohibited_claim")
-            review = VisualReview(
-                summary=parsed.summary,
-                visible_differences=parsed.visible_differences,
-                limitations=parsed.limitations,
-                confidence=parsed.confidence,
-                model=self.settings.agnes_model,
-            )
-            self.last_run = IntegrationRun(
-                provider="agnes", product="visual-evidence", model=self.settings.agnes_model,
-                status="completed", latency_ms=int((time.monotonic() - started) * 1000),
-                request_id=request_id, metadata={"evidence_id": moment.id, "image_count": len(images)},
-            )
-            return review
-        except (httpx.HTTPError, KeyError, TypeError, json.JSONDecodeError, ValidationError, ValueError) as exc:
-            if str(exc) == "prohibited_claim":
-                reason = "prohibited_claim"
-            elif isinstance(exc, httpx.HTTPStatusError):
-                reason = f"http_{exc.response.status_code}"
-            elif isinstance(exc, httpx.HTTPError):
-                reason = "transport_error"
-            elif isinstance(exc, json.JSONDecodeError):
-                reason = "invalid_model_json"
-            elif isinstance(exc, ValidationError):
-                reason = "invalid_review_schema"
-            else:
-                reason = "malformed_response"
-            self.last_run = IntegrationRun(
-                provider="agnes", product="visual-evidence", model=self.settings.agnes_model,
-                status="failed", latency_ms=int((time.monotonic() - started) * 1000),
-                fallback_reason=reason,
-            )
-            return None
-        finally:
-            if close_client:
-                await client.aclose()
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            raise _AttemptError(
+                f"http_{status}", retryable=status in _RETRYABLE_STATUS,
+                retry_after=_retry_after_seconds(exc.response),
+            ) from None
+        except httpx.HTTPError:
+            raise _AttemptError("transport_error", retryable=True) from None
+
+        try:
+            body = response.json()
+            raw = body["choices"][0]["message"]["content"]
+            if not isinstance(raw, str):
+                raise TypeError("content_not_string")
+            parsed = AgnesStructuredReview.model_validate(_decode_json(raw))
+        except json.JSONDecodeError:
+            raise _AttemptError("invalid_model_json", retryable=True) from None
+        except ValidationError:
+            raise _AttemptError("invalid_review_schema", retryable=True) from None
+        except (KeyError, IndexError, TypeError):
+            raise _AttemptError("malformed_response", retryable=True) from None
+
+        if _contains_prohibited_claim(
+            [parsed.summary, *parsed.visible_differences, *parsed.limitations]
+        ):
+            raise _AttemptError("prohibited_claim", retryable=False)
+        served_model = str(body.get("model") or model)
+        request_id = response.headers.get("x-request-id") or body.get("id")
+        return VisualReview(
+            summary=parsed.summary,
+            visible_differences=parsed.visible_differences,
+            limitations=parsed.limitations,
+            confidence=parsed.confidence,
+            model=served_model,
+        ), str(request_id) if request_id is not None else None, served_model
 
     @staticmethod
     def _content(moment: EvidenceMoment, images: list[PreparedEvidenceImage]) -> list[dict]:

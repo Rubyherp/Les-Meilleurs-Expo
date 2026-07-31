@@ -1,5 +1,20 @@
 import asyncio
+import os
 from collections.abc import AsyncIterator
+
+# Unit tests must never inherit paid-provider credentials or model overrides
+# from a developer's ignored backend/.env file.
+os.environ.update({
+    "OPENAI_API_KEY": "",
+    "OPENAI_MODEL": "gpt-5.4-nano",
+    "LLM_API_KEY": "",
+    "LLM_MODEL": "gpt-5.4-nano",
+    "AGNES_API_KEY": "",
+    "AGNES_MODEL": "agnes-2.5-flash",
+    "ZO_API_KEY": "",
+    "GMI_API_KEY": "",
+    "GMI_ENABLED": "false",
+})
 
 import pytest
 from fastapi.testclient import TestClient
