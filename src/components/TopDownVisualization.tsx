@@ -11,6 +11,7 @@ interface Props {
   result: Phase4Result;
   participants?: GroupParticipant[];
   durationSeconds?: number;
+  seekTimestampSeconds?: number | null;
 }
 
 const TRAIL_OPTIONS: { value: TrailMode; label: string }[] = [
@@ -19,7 +20,7 @@ const TRAIL_OPTIONS: { value: TrailMode; label: string }[] = [
   { value: "none", label: "None" },
 ];
 
-export default function TopDownVisualization({ result, participants = [], durationSeconds }: Props) {
+export default function TopDownVisualization({ result, participants = [], durationSeconds, seekTimestampSeconds }: Props) {
   const [currentFrameIndex, setCurrentFrameIndex] = useState(0);
   const [selectedTrackId, setSelectedTrackId] = useState<Phase4TrackId | null>(null);
   const [trailMode, setTrailMode] = useState<TrailMode>("all");
@@ -54,6 +55,16 @@ export default function TopDownVisualization({ result, participants = [], durati
     setCurrentFrameIndex(0);
     setIsPlaying(false);
   }, [result]);
+
+  useEffect(() => {
+    if (seekTimestampSeconds == null || !result.frames.length) return;
+    let nearest = 0;
+    result.frames.forEach((item, index) => {
+      if (Math.abs(item.timestampSeconds - seekTimestampSeconds) < Math.abs(result.frames[nearest].timestampSeconds - seekTimestampSeconds)) nearest = index;
+    });
+    setCurrentFrameIndex(nearest);
+    setIsPlaying(false);
+  }, [seekTimestampSeconds, result.frames]);
 
   const labelForTrack = (trackId: Phase4TrackId) => labels.get(String(trackId)) ?? `Dancer ${trackId}`;
   const selectedTrack = frame?.tracks.find((track) => String(track.id) === String(selectedTrackId));

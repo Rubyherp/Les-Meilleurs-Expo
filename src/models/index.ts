@@ -61,3 +61,6 @@ export {
   type CoachStatus,
   normalizeCoachResponse,
 } from "./CoachReport";
+export { type IntegrationRun, type IntegrationStatus, type IntegrationProvider } from "./IntegrationRun";
+export { type EvidenceMoment, type EvidenceCategory } from "./EvidenceMoment";
+export { type ZoExportRequest, type ZoExportResponse } from "./ZoExport";

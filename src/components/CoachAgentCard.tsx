@@ -10,6 +10,7 @@ const PHASE_COLORS: Record<number, { bg: string; badge: string; accent: string }
   1: { bg: "bg-green-50", badge: "bg-[#C8F36A]/20", accent: "#78A520" },
   2: { bg: "bg-amber-50", badge: "bg-[#FFB347]/20", accent: "#D97706" },
   3: { bg: "bg-blue-50", badge: "bg-[#4A90D9]/20", accent: "#4A90D9" },
+  4: { bg: "bg-purple-50", badge: "bg-purple-500/15", accent: "#8B5CF6" },
 };
 
 const SEVERITY_COLORS: Record<string, string> = {
@@ -55,7 +56,7 @@ export default function CoachAgentCard({ agent }: Props) {
         </View>
         <View className="rounded-full bg-lesInk/10 px-2 py-0.5">
           <Text className="text-[10px] font-medium text-lesMuted uppercase">
-            {agent.source === "llm" ? "AI" : agent.source === "error" ? "Error" : "Data-driven"}
+            {agent.source === "gmi" ? "GMI" : agent.source === "llm" ? "AI" : agent.source === "error" ? "Error" : "Data-driven"}
           </Text>
         </View>
       </View>

@@ -1,135 +1,17 @@
-import asyncio
-import json
+"""Fallback-safe coaching orchestration."""
+
 from datetime import datetime, timezone
 from uuid import UUID
 
-from app.schemas.coaching import CoachAgent, CoachIssue, CoachPhase, CoachingReport
-from app.services.coaching.context import CoachingContext, extract_coaching_context
+from app.core.config import Settings, get_settings
+from app.integrations.gmi.client import GmiInferenceClient
+from app.integrations.models import EvidenceMoment, IntegrationRun
+from app.integrations.openai.agents import run_agentic_coaching
+from app.schemas.coaching import CoachingReport
+from app.services.coaching.context import extract_coaching_context
 from app.services.coaching.deterministic import generate_deterministic_report
-from app.services.coaching.provider import create_provider
+from app.services.evidence.selector import select_evidence
 
-_AGENT_NAMES = {1: "Observation Agent", 2: "Timing Agent", 3: "Formation Agent"}
-
-_SYSTEM_PROMPT = """You are one specialist in a collaborative dance-coaching team. Use warm, encouraging, simple language with no technical jargon. Analyse only the provided structured measurements. Return a JSON object with: summary (1-2 sentences), strengths (list of strings), issues (list of {description, severity: low|medium|high, category: string|null}), suggestions (list of actionable tips), confidence (float 0-1). Never invent observations or imply that you measured music beats when no reference was provided."""
-
-_AGENT_PROMPTS = {
-    1: "You are the Observation Agent. Judge camera visibility, pose readability, occlusion, and tracking reliability.",
-    2: "You are the Timing Agent. Judge reference timing offset when a reference exists; otherwise discuss only movement-pulse consistency.",
-    3: "You are the Formation Agent for group choreography. Judge relative spacing, crowding, and spatial match.",
-}
-
-def _parse_llm_agent(raw: str | None, agent_num: int, ctx) -> CoachAgent:
-    """Parse an LLM specialist response, falling back on any failure."""
-    deterministic = _get_deterministic_agent(agent_num, ctx)
-    if not raw:
-        return deterministic
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        return deterministic
-    if not isinstance(data, dict):
-        return deterministic
-    
-    try:
-        conf = max(0.0, min(1.0, float(data.get("confidence", deterministic.confidence))))
-    except (TypeError, ValueError):
-        return deterministic
-    
-    return CoachPhase(
-        phase=agent_num,
-        name=_AGENT_NAMES[agent_num],
-        available=True,
-        source="llm",
-        summary=str(data.get("summary", "")).strip(),
-        strengths=[str(s) for s in (data.get("strengths") or []) if isinstance(s, str)],
-        issues=[CoachIssue(
-            description=str(i.get("description", "")),
-            severity=str(i.get("severity", "medium")),
-            category=str(i.get("category")) if i.get("category") else None,
-        ) for i in (data.get("issues") or []) if isinstance(i, dict)],
-        suggestions=[str(s) for s in (data.get("suggestions") or []) if isinstance(s, str)],
-        evidence=deterministic.evidence,
-        confidence=round(conf, 2),
-    )
-
-def _get_deterministic_agent(agent_num: int, ctx: CoachingContext) -> CoachAgent:
-    from app.services.coaching.deterministic import (
-        _formation_agent,
-        _observation_agent,
-        _timing_agent,
-    )
-    mapping = {
-        1: (_observation_agent, ctx.observation),
-        2: (_timing_agent, ctx.timing),
-        3: (_formation_agent, ctx.formation),
-    }
-    entry = mapping.get(agent_num)
-    if entry is None:
-        return CoachPhase(
-            phase=agent_num,
-            name=_AGENT_NAMES.get(agent_num, "Unknown Agent"),
-            available=False,
-            source="error",
-            summary="Unknown coaching agent.",
-            confidence=0.0,
-        )
-    fn, sub_ctx = entry
-    if fn:
-        return fn(sub_ctx)
-    raise AssertionError("Agent mapping is incomplete.")
-
-def _format_context_for_llm(agent_num: int, ctx: CoachingContext) -> str:
-    """Render structured context as a compact string for the LLM prompt."""
-    if agent_num == 1:
-        observation = ctx.observation
-        return (
-            f"Observation: group={observation.is_group}, "
-            f"visible_frames={observation.frames_with_detections}/{observation.total_frames}, "
-            f"pose_frames={observation.frames_with_poses}/{observation.total_frames}, "
-            f"max_people={observation.max_persons_per_frame}, "
-            f"expected_people={observation.expected_dancer_count}, "
-            f"tracks={observation.total_tracks}, "
-            f"occlusions={observation.occlusion_events}, lost={observation.lost_events}."
-        )
-    if agent_num == 2:
-        timing = ctx.timing
-        return (
-            f"Timing: has_reference={timing.has_reference}, samples={timing.sample_count}, "
-            f"mean_signed_offset_seconds={timing.average_offset_seconds:.3f}, "
-            f"mean_absolute_offset_seconds={timing.average_absolute_offset_seconds:.3f}, "
-            f"offset_spread_seconds={timing.offset_spread_seconds:.3f}, "
-            f"pulse_consistency={timing.pulse_consistency:.3f}, "
-            f"group_sync_score={timing.group_sync_score}."
-        )
-    if agent_num == 3:
-        formation = ctx.formation
-        return (
-            f"Formation: dancers={formation.tracked_dancers}, "
-            f"group_frames={formation.observed_group_frames}, "
-            f"average_pair_distance={formation.average_pair_distance:.3f}, "
-            f"spacing_variation={formation.spacing_variation:.3f}, "
-            f"close_spacing_rate={formation.close_spacing_rate:.3f}, "
-            f"reference_match_score={formation.reference_match_score}."
-        )
-    return ""
-
-async def _try_llm_agent(provider, agent_num: int, ctx: CoachingContext) -> CoachAgent:
-    """Try an LLM specialist and fall back deterministically on any failure."""
-    deterministic = _get_deterministic_agent(agent_num, ctx)
-    if not deterministic.available:
-        return deterministic
-    if not provider.available:
-        return deterministic
-    context_str = _format_context_for_llm(agent_num, ctx)
-    messages = [
-        {"role": "system", "content": _SYSTEM_PROMPT},
-        {"role": "user", "content": f"{_AGENT_PROMPTS.get(agent_num, '')}\n\nData:\n{context_str}\n\nRespond with a JSON object."},
-    ]
-    try:
-        raw = await asyncio.wait_for(provider.chat(messages), timeout=30.0)
-    except (asyncio.TimeoutError, Exception):
-        return deterministic
-    return _parse_llm_agent(raw, agent_num, ctx)
 
 async def run_coaching(
     session_id: UUID,
@@ -138,62 +20,62 @@ async def run_coaching(
     *,
     is_group: bool = False,
     expected_dancer_count: int = 1,
+    settings: Settings | None = None,
+    evidence_moments: list[EvidenceMoment] | None = None,
+    extra_integrations: list[IntegrationRun] | None = None,
 ) -> CoachingReport:
-    """Run the applicable specialists through the existing AI coach."""
-    ctx = extract_coaching_context(
-        result,
-        mode,
-        is_group=is_group,
-        expected_dancer_count=expected_dancer_count,
+    """Build a report while keeping deterministic measurements authoritative."""
+    settings = settings or get_settings()
+    context = extract_coaching_context(
+        result, mode, is_group=is_group, expected_dancer_count=expected_dancer_count
     )
-    provider = create_provider()
-
-    if not provider.available:
-        return generate_deterministic_report(
-            session_id,
-            mode,
-            ctx,
-            is_group=is_group,
-        )
-    
-    from app.services.coaching.deterministic import (
-        _gated_agent,
-        observation_allows_specialists,
+    duration = result.get("duration_seconds")
+    evidence = evidence_moments if evidence_moments is not None else select_evidence(
+        result, mode=mode, is_group=is_group,
+        max_moments=settings.agnes_max_evidence_moments,
+        duration_seconds=float(duration) if isinstance(duration, (int, float)) else None,
     )
+    provider_result = await run_agentic_coaching(
+        session_id, context, evidence, is_group=is_group, settings=settings
+    )
+    integrations: list[IntegrationRun] = []
+    for raw in result.get("integrations") or []:
+        try:
+            integrations.append(IntegrationRun.model_validate(raw))
+        except Exception:
+            continue
+    integrations.extend(extra_integrations or [])
+    integrations.extend(provider_result.integrations)
 
-    observation_baseline = _get_deterministic_agent(1, ctx)
-    observation = await _try_llm_agent(provider, 1, ctx)
-    agents = [observation]
-    coordination_notes: list[str] = []
-    if observation_allows_specialists(observation_baseline):
-        remaining_agent_numbers = [2, 3] if is_group else [2]
-        agents.extend(
-            await asyncio.gather(
-                *[
-                    _try_llm_agent(provider, agent_num, ctx)
-                    for agent_num in remaining_agent_numbers
-                ]
-            )
-        )
+    if provider_result.agents:
+        agents = provider_result.agents
+        overall = provider_result.overall_summary
+        notes = provider_result.coordination_notes
+        model = settings.openai_model if any(a.source == "llm" for a in agents) else None
     else:
-        reason = "Paused because the Observation Agent could not verify the video reliably."
-        coordination_notes.append(reason)
-        agents.append(_gated_agent(2, reason))
-        if is_group:
-            agents.append(_gated_agent(3, reason))
+        fallback = generate_deterministic_report(session_id, mode, context, is_group=is_group)
+        agents = fallback.agents
+        overall = fallback.overall_summary
+        notes = fallback.coordination_notes
+        model = None
 
-    summaries = [agent.summary for agent in agents if agent.available]
-    practice_label = "Group" if is_group else "Solo"
-    overall = f"{practice_label} coaching team report. " + " ".join(summaries)
-    
+    gmi_agent, gmi_run = await GmiInferenceClient(settings).audit(
+        context,
+        evidence,
+        agents,
+        agent_id=max((agent.agent_id for agent in agents), default=0) + 1,
+    )
+    integrations.append(gmi_run)
+    if gmi_agent is not None:
+        agents = [*agents, gmi_agent]
+        notes = [*notes, "GMI independently audited the draft against aggregate measurements."]
+        model = model or settings.gmi_model
+
     return CoachingReport(
-        session_id=session_id,
-        report_version=3,
-        mode=mode,
+        session_id=session_id, report_version=4, mode=mode,
         practice_type="group" if is_group else "solo",
-        overall_summary=overall,
-        agents=agents,
-        coordination_notes=coordination_notes,
-        generated_at=datetime.now(timezone.utc),
-        llm_model_used=provider.model_name if provider.available else None,
+        overall_summary=overall, agents=agents, coordination_notes=notes,
+        generated_at=datetime.now(timezone.utc), llm_model_used=model,
+        evidence_moments=evidence, integrations=integrations,
+        trace_id=provider_result.trace_id,
     )

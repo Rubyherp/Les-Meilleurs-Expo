@@ -145,13 +145,33 @@ curl -s -X POST "http://localhost:8000/api/v1/sessions/$SESSION/coach" \
 curl -s "http://localhost:8000/api/v1/sessions/$SESSION/coach" | jq .report.agents
 ```
 
-Optionally set these in `backend/.env` for LLM-enhanced coaching reports:
+Set sponsor credentials only in the ignored `backend/.env` file:
 
 ```
-LLM_API_KEY=sk-your-key
-LLM_MODEL=gpt-4o-mini
-LLM_TEMPERATURE=0.3
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5.4-nano
+AGNES_API_KEY=
+AGNES_BASE_URL=https://apihub.agnes-ai.com/v1
+AGNES_MODEL=agnes-2.5-flash
+ZO_API_KEY=
+ZO_API_URL=https://api.zo.computer
+GMI_API_KEY=
+GMI_BASE_URL=https://api.gmi-serving.com/v1
+GMI_MODEL=openai/gpt-5.4-nano
 ```
+
+OpenAI uses typed specialist agents after a deterministic observation gate.
+Agnes receives at most three derived JPEG evidence moments, never a raw video.
+Zo export is an explicit private/unlisted action; reminder creation is separate
+and opt-in. Missing or failed providers leave deterministic coaching usable and
+appear as `not_configured`, `fallback`, or `failed` in report provenance.
+
+GMI Cloud serverless inference independently audits draft coaching against only
+aggregate measurements and deterministic evidence text. Its model, latency,
+request ID, token counts, and fallback status appear in provenance. The separate
+`backend/Dockerfile.gmi` remains an optional GPU Compute deployment lane; CUDA
+success is recorded only after a real runtime probe. See
+`backend/deploy/gmi/README.md` for that optional path.
 
 ## Pipeline
 

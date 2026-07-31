@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ScrollView, View, Text, Pressable, Share } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import PageHeader from "./PageHeader";
@@ -7,6 +8,7 @@ import GroupSyncCard from "./GroupSyncCard";
 import TopDownVisualization from "./TopDownVisualization";
 import Phase5ComparisonView from "./Phase5ComparisonView";
 import CoachFeedbackView from "./CoachFeedbackView";
+import ZoExportCard from "./ZoExportCard";
 import { DanceSession } from "../models/DanceSession";
 import { AnalysisResult } from "../models/AnalysisResult";
 import { GroupParticipant } from "../models/GroupParticipant";
@@ -34,6 +36,7 @@ export default function AnalysisResultsView({
   onRequestCoach,
   onPracticeAgain,
 }: Props) {
+  const [seekTimestampSeconds, setSeekTimestampSeconds] = useState<number | null>(null);
   const share = async () => {
     await Share.share({
       message: `My ${session.title} practice notes from Les Meilleurs`,
@@ -77,6 +80,7 @@ export default function AnalysisResultsView({
             result={result.comparison}
             participants={participants}
             durationSeconds={session.duration}
+            seekTimestampSeconds={seekTimestampSeconds}
           />
         )}
 
@@ -85,6 +89,7 @@ export default function AnalysisResultsView({
             result={result.phase4}
             participants={participants}
             durationSeconds={session.duration}
+            seekTimestampSeconds={seekTimestampSeconds}
           />
         )}
 
@@ -93,7 +98,10 @@ export default function AnalysisResultsView({
           loading={coachLoading}
           error={coachError}
           onTrigger={onRequestCoach}
+          onViewMoment={setSeekTimestampSeconds}
         />
+
+        <ZoExportCard sessionId={session.remoteSessionID} />
 
         <View className="gap-3">
           <Text className="text-lg font-bold text-lesInk">What's working</Text>

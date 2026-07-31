@@ -35,7 +35,7 @@ class OpenAIProvider:
     def __init__(
         self,
         api_key: str,
-        model: str = "gpt-4o-mini",
+        model: str = "gpt-5.4-nano",
         temperature: float = 0.3,
     ) -> None:
         self._api_key = api_key
@@ -77,12 +77,14 @@ def create_provider(settings=None) -> LLMProvider:
     OpenAI SDK is not available. Never raises.
     """
     s = settings or get_settings()
-    if not s.llm_api_key:
+    api_key = s.openai_api_key or s.llm_api_key
+    model = s.openai_model or s.llm_model
+    if not api_key:
         return NullProvider()
     try:
         return OpenAIProvider(
-            api_key=s.llm_api_key,
-            model=s.llm_model,
+            api_key=api_key,
+            model=model,
             temperature=s.llm_temperature,
         )
     except Exception:

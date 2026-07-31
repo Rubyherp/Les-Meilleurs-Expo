@@ -1,6 +1,8 @@
 import { View, Text, Pressable, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import CoachAgentCard from "./CoachAgentCard";
+import EvidenceMomentCard from "./EvidenceMomentCard";
+import IntegrationProvenance from "./IntegrationProvenance";
 import type { CoachResponse } from "@/models/CoachReport";
 
 interface Props {
@@ -8,6 +10,7 @@ interface Props {
   loading: boolean;
   error: string | null;
   onTrigger: () => void;
+  onViewMoment?: (seconds: number) => void;
 }
 
 function SkeletonCard() {
@@ -24,7 +27,7 @@ function SkeletonCard() {
   );
 }
 
-export default function CoachFeedbackView({ coachResponse, loading, error, onTrigger }: Props) {
+export default function CoachFeedbackView({ coachResponse, loading, error, onTrigger, onViewMoment = () => undefined }: Props) {
   // Loading
   if (loading) {
     return (
@@ -114,10 +117,14 @@ export default function CoachFeedbackView({ coachResponse, loading, error, onTri
         </View>
       ))}
 
+      {report.evidenceMoments.length > 0 && <View className="gap-3"><Text className="text-lg font-bold text-lesInk">Evidence moments</Text>{report.evidenceMoments.map((moment) => <EvidenceMomentCard key={moment.id} moment={moment} onViewMoment={onViewMoment} />)}</View>}
+
       {/* Specialist cards */}
       {report.agents.map((agent) => (
         <CoachAgentCard key={agent.agentId} agent={agent} />
       ))}
+
+      <IntegrationProvenance integrations={report.integrations} />
 
       {/* Footer */}
       <View className="flex-row items-center justify-center gap-1">

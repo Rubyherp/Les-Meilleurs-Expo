@@ -49,3 +49,9 @@ assets/videos/*.mp4
 
 # Playwright MCP
 .playwright-mcp/
+
+# Deepwork session state
+.slim/deepwork/
+
+# Local git worktrees
+.worktrees/

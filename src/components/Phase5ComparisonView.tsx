@@ -16,6 +16,7 @@ interface Props {
   result: Phase5Result;
   participants?: GroupParticipant[];
   durationSeconds?: number;
+  seekTimestampSeconds?: number | null;
 }
 
 type DeviationSeverity = "steady" | "watch" | "drift";
@@ -64,7 +65,7 @@ function frameIndexFor(result: Phase5Result, timelineIndex: number, side: "refer
   return Math.round((timelineIndex / (timelineCount - 1)) * (count - 1));
 }
 
-export default function Phase5ComparisonView({ result, participants = [], durationSeconds }: Props) {
+export default function Phase5ComparisonView({ result, participants = [], durationSeconds, seekTimestampSeconds }: Props) {
   const [mode, setMode] = useState<ComparisonMode>("overlay");
   const [timelineIndex, setTimelineIndex] = useState(0);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -100,6 +101,19 @@ export default function Phase5ComparisonView({ result, participants = [], durati
     setSelectedKey(null);
     setIsPlaying(false);
   }, [result]);
+
+  useEffect(() => {
+    if (seekTimestampSeconds == null || timelineCount <= 0) return;
+    let nearest = 0;
+    let distance = Number.POSITIVE_INFINITY;
+    for (let index = 0; index < timelineCount; index += 1) {
+      const attempt = result.attempt.frames[frameIndexFor(result, index, "attempt", timelineCount)];
+      const next = Math.abs((attempt?.timestampSeconds ?? 0) - seekTimestampSeconds);
+      if (next < distance) { nearest = index; distance = next; }
+    }
+    setTimelineIndex(nearest);
+    setIsPlaying(false);
+  }, [seekTimestampSeconds, result, timelineCount]);
 
   useEffect(() => {
     if (!isPlaying || timelineCount <= 1) return;

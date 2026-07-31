@@ -3,12 +3,14 @@ import time
 from fastapi import FastAPI, Request
 
 from app.api.routes import router
+from app.api.zo_routes import zo_router
 from app.core.config import get_settings
 from app.core.logger import logger
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name, version="0.1.0")
 app.include_router(router, prefix=settings.api_prefix)
+app.include_router(zo_router, prefix=settings.api_prefix)
 
 
 @app.middleware("http")

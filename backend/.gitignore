@@ -12,6 +12,7 @@ models/
 *.engine
 __pycache__/
 .pytest_cache/
+.venv/
 .coverage
 *.py[cod]
 *.egg-info/

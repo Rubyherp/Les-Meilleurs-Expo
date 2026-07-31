@@ -3,7 +3,9 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import AliasChoices, BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field, field_validator
+
+from app.integrations.models import EvidenceMoment, IntegrationRun
 
 
 class CoachingRequest(BaseModel):
@@ -53,7 +55,7 @@ CoachPhase = CoachAgent
 
 class CoachingReport(BaseModel):
     session_id: UUID
-    report_version: int = 3
+    report_version: int = 4
     mode: str  # "single" | "comparison"
     practice_type: str = "solo"  # "solo" | "group"
     overall_summary: str
@@ -63,6 +65,16 @@ class CoachingReport(BaseModel):
     coordination_notes: list[str] = []
     generated_at: datetime
     llm_model_used: str | None = None
+
+    # ── Sponsor integration extensions (v4) ────────────────────────────
+    evidence_moments: list[EvidenceMoment] = Field(default_factory=list)
+    integrations: list[IntegrationRun] = Field(default_factory=list)
+    trace_id: str | None = None
+
+    @field_validator("trace_id", mode="before")
+    @classmethod
+    def stringify_trace_id(cls, value):
+        return str(value) if value is not None else None
 
     @property
     def phases(self) -> list[CoachAgent]:

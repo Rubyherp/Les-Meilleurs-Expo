@@ -1,3 +1,6 @@
+import { normalizeEvidenceMoment, type EvidenceMoment, type EvidenceMomentJson } from "./EvidenceMoment";
+import { normalizeIntegrationRun, type IntegrationRun, type IntegrationRunJson } from "./IntegrationRun";
+
 /**
  * Wire-format and normalized types for the AI Coach report.
  *
@@ -53,6 +56,9 @@ export interface CoachReportJson {
   coordination_notes?: string[];
   generated_at: string;
   llm_model_used: string | null;
+  evidence_moments?: EvidenceMomentJson[];
+  integrations?: IntegrationRunJson[];
+  trace_id?: string | null;
 }
 
 export interface CoachResponseJson {
@@ -104,6 +110,9 @@ export interface CoachReport {
   coordinationNotes: string[];
   generatedAt: string;
   llmModelUsed: string | null;
+  evidenceMoments: EvidenceMoment[];
+  integrations: IntegrationRun[];
+  traceId: string | null;
 }
 
 export interface CoachResponse {
@@ -160,6 +169,9 @@ function normalizeCoachReport(json: CoachReportJson): CoachReport {
     coordinationNotes: json.coordination_notes ?? [],
     generatedAt: json.generated_at,
     llmModelUsed: json.llm_model_used,
+    evidenceMoments: (json.evidence_moments ?? []).map(normalizeEvidenceMoment).filter((value): value is EvidenceMoment => value !== null),
+    integrations: (json.integrations ?? []).map(normalizeIntegrationRun),
+    traceId: json.trace_id ?? null,
   };
 }
 
