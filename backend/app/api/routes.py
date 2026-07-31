@@ -1,3 +1,6 @@
+import asyncio
+import shutil
+import tempfile
 import uuid
 from pathlib import Path
 from typing import BinaryIO, Literal, cast
@@ -13,6 +16,9 @@ from sqlalchemy.orm import selectinload
 from app.api.dependencies import get_storage_service, get_task_dispatcher
 from app.core.config import get_settings
 from app.db.session import get_db
+from app.integrations.health import get_integration_health
+from app.integrations.models import EvidenceMoment, IntegrationHealth
+from app.integrations.agnes.reviewer import review_evidence_with_agnes
 from app.models import AnalysisJob, AnalysisResult, AnalysisSession, StoredMedia
 from app.schemas.session import (
     CalibrationRequest,
@@ -28,6 +34,8 @@ from app.schemas.session import (
 from app.services.storage import Storage
 from app.schemas.coaching import CoachingReport, CoachingRequest, CoachingResponse
 from app.services.coaching.orchestrator import run_coaching
+from app.services.evidence.models import EvidenceMedia
+from app.services.evidence.selector import select_evidence
 from app.services.tasks import TaskDispatcher
 from app.services.uploads import UploadValidationError, validate_and_buffer_upload
 
@@ -68,6 +76,12 @@ async def _store_video(
 @router.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@router.get("/health/integrations", response_model=IntegrationHealth)
+async def integration_health() -> IntegrationHealth:
+    """Return sanitised provider configuration state (no paid calls)."""
+    return get_integration_health(get_settings())
 
 
 @router.post("/sessions", response_model=SessionCreateResponse, status_code=status.HTTP_201_CREATED)
@@ -344,6 +358,7 @@ async def request_coaching(
     session_id: UUID,
     payload: CoachingRequest | None = None,
     db: AsyncSession = Depends(get_db),
+    storage: Storage = Depends(get_storage_service),
 ) -> CoachingResponse:
     session = await db.get(AnalysisSession, session_id)
     if session is None:
@@ -364,21 +379,128 @@ async def request_coaching(
             message="No analysis result found for this session."
         )
     result, job = row
-    
+
     mode = job.mode if job.mode else "single"
+    settings = get_settings()
+    payload = payload or CoachingRequest()
+    cache_key = {
+        "version": 1,
+        "mode": mode,
+        "is_group": payload.is_group,
+        "expected_dancer_count": payload.expected_dancer_count,
+        "openai_model": settings.openai_model if settings.openai_api_key else None,
+        "agnes_model": settings.agnes_model if settings.agnes_api_key else None,
+        "gmi_model": settings.gmi_model if settings.gmi_api_key else None,
+    }
+    cached = result.result_metadata.get("coaching_report")
+    retriable_products = {
+        "visual-evidence", "agents-coaching", "serverless-inference-audit",
+    }
+    cached_has_provider_failure = any(
+        run.get("product") in retriable_products
+        and run.get("status") in {"failed", "fallback"}
+        for run in (cached or {}).get("integrations", [])
+        if isinstance(run, dict)
+    )
+    if (
+        cached
+        and not cached_has_provider_failure
+        and result.result_metadata.get("coaching_cache_key") == cache_key
+    ):
+        return CoachingResponse(
+            session_id=session_id, report=CoachingReport(**cached), status="completed"
+        )
+
+    is_group = payload.is_group
+    evidence = select_evidence(
+        result.result_metadata, mode=mode, is_group=is_group,
+        max_moments=settings.agnes_max_evidence_moments,
+        duration_seconds=(float(result.result_metadata["duration_seconds"]) if isinstance(result.result_metadata.get("duration_seconds"), (int, float)) else None),
+    )
+    reviewed_evidence = evidence
+    agnes_runs = []
+    if evidence:
+        attempt_id = job.attempt_media_id or job.media_id
+        attempt_media = await db.get(StoredMedia, attempt_id) if attempt_id else None
+        reference_media = await db.get(StoredMedia, job.reference_media_id) if job.reference_media_id else None
+        if attempt_media:
+            with tempfile.TemporaryDirectory(prefix="les-evidence-") as directory:
+                attempt_path = str(Path(directory) / "attempt.video")
+                attempt_stream = await storage.download(attempt_media.object_key)
+                try:
+                    await asyncio.to_thread(_copy_to_path, attempt_stream, attempt_path)
+                finally:
+                    attempt_stream.close()
+                reference_path = None
+                if reference_media:
+                    reference_path = str(Path(directory) / "reference.video")
+                    reference_stream = await storage.download(reference_media.object_key)
+                    try:
+                        await asyncio.to_thread(_copy_to_path, reference_stream, reference_path)
+                    finally:
+                        reference_stream.close()
+                reviewed_evidence, agnes_run = await review_evidence_with_agnes(
+                    evidence, EvidenceMedia(attempt_path, reference_path), settings
+                )
+                agnes_runs.append(agnes_run)
+        else:
+            from app.integrations.models import IntegrationRun
+            agnes_runs.append(IntegrationRun(
+                provider="agnes", product="visual-evidence", model=settings.agnes_model,
+                status="fallback", fallback_reason="source_media_unavailable",
+            ))
+
     report = await run_coaching(
         session_id,
         mode,
         result.result_metadata,
-        is_group=payload.is_group if payload else False,
-        expected_dancer_count=payload.expected_dancer_count if payload else 1,
+        is_group=is_group,
+        expected_dancer_count=payload.expected_dancer_count,
+        settings=settings,
+        evidence_moments=reviewed_evidence,
+        extra_integrations=agnes_runs,
     )
     
     # Store report back in result_metadata for GET caching
-    result.result_metadata["coaching_report"] = report.model_dump(mode="json")
+    result.result_metadata = {
+        **result.result_metadata,
+        "coaching_report": report.model_dump(mode="json"),
+        "coaching_cache_key": cache_key,
+    }
     await db.commit()
     
     return CoachingResponse(session_id=session_id, report=report, status="completed")
+
+
+def _copy_to_path(source: BinaryIO, destination: str) -> None:
+    source.seek(0)
+    with open(destination, "wb") as output:
+        shutil.copyfileobj(source, output)
+
+
+@router.get("/sessions/{session_id}/evidence", response_model=list[EvidenceMoment])
+async def get_session_evidence(
+    session_id: UUID, db: AsyncSession = Depends(get_db)
+) -> list[EvidenceMoment]:
+    """Return only persisted, session-scoped evidence from the cached report."""
+    session = await db.get(AnalysisSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    query = (
+        select(AnalysisResult)
+        .join(AnalysisJob, AnalysisJob.id == AnalysisResult.job_id)
+        .where(AnalysisJob.session_id == session_id)
+        .order_by(AnalysisResult.created_at.desc())
+        .limit(1)
+    )
+    result = (await db.execute(query)).scalar_one_or_none()
+    if result is None:
+        return []
+    cached = result.result_metadata.get("coaching_report") or {}
+    return [
+        EvidenceMoment.model_validate(item)
+        for item in cached.get("evidence_moments") or []
+    ]
 
 @router.get("/sessions/{session_id}/coach", response_model=CoachingResponse)
 async def get_coaching(session_id: UUID, db: AsyncSession = Depends(get_db)) -> CoachingResponse:

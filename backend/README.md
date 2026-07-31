@@ -227,3 +227,27 @@ Optional recovery assets are configured with
 `ANALYSIS_RECOVERY_POSE_MODEL_PATH`. If either asset is unavailable, the
 recovery profile safely uses the provisioned baseline asset with denser
 sampling and adjusted tracker/crop parameters.
+
+## Sponsor integrations
+
+The sponsor path is optional and fallback-safe. Configure it in the ignored
+`backend/.env` using `OPENAI_API_KEY`, `AGNES_API_KEY`, `ZO_API_KEY`,
+`GMI_API_KEY`, and the model/base URL values documented in `.env.example`.
+Generic `LLM_API_KEY` is a deprecated OpenAI fallback.
+
+- OpenAI Agents SDK coordinates typed Observation, Timing, Formation, and
+  synthesis outputs. Deterministic measurements and the observation gate remain
+  authoritative; tracing excludes sensitive payloads by default.
+- Agnes reviews one deterministically selected, resized JPEG evidence moment at
+  a time. Retryable capacity failures receive one bounded `agnes-2.0-flash`
+  compatibility attempt. Raw uploads and permanent media URLs are never sent.
+- Zo uses the documented `POST /zo/ask` structured-output endpoint. Report save
+  and reminder creation are separate operations; reminders require an explicit
+  timestamp and timezone.
+- GMI serverless inference uses the documented OpenAI-compatible API to audit
+  coaching against aggregate measurements and draft text. No raw video or image
+  is sent. `GMI_ENABLED` and `ML_DEVICE=cuda` are separate, optional GPU Compute
+  settings and must never be enabled merely because an inference API key exists.
+
+Unit tests never make paid calls. Live provider testing remains opt-in and must
+be reported separately from mocked coverage.

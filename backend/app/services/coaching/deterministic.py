@@ -884,7 +884,7 @@ def generate_deterministic_report(
 
     return CoachingReport(
         session_id=session_id,
-        report_version=3,
+        report_version=4,
         mode=mode,
         practice_type="group" if is_group else "solo",
         overall_summary=overall,

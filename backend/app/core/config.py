@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     comparison_include_predicted: bool = False
     comparison_predicted_weight: float = Field(default=0.1, gt=0, le=1)
     llm_api_key: str = ""
-    llm_model: str = "gpt-4o-mini"
+    llm_model: str = "gpt-5.4-nano"
     llm_temperature: float = 0.3
     yolo_model_path: str = "models/yolo11n.pt"
     pose_model_path: str = "models/pose_landmarker_lite.task"
@@ -66,6 +66,43 @@ class Settings(BaseSettings):
     pose_min_presence_confidence: float = Field(default=0.5, ge=0, le=1)
     pose_min_tracking_confidence: float = Field(default=0.5, ge=0, le=1)
 
+    # ── Provider integrations ──────────────────────────────────────────
+    # OpenAI (shared LLM)
+    openai_api_key: str = ""
+    openai_model: str = "gpt-5.4-nano"
+    openai_timeout_seconds: float = Field(default=30.0, gt=0)
+    openai_agents_trace_include_sensitive_data: bool = False
+
+    # Agnes (visual coaching provider)
+    agnes_api_key: str = ""
+    agnes_base_url: str = ""
+    agnes_model: str = "agnes-2.5-flash"
+    agnes_fallback_model: str = "agnes-2.0-flash"
+    agnes_timeout_seconds: float = Field(default=30.0, gt=0)
+    agnes_max_retries: int = Field(default=1, ge=0, le=2)
+    agnes_retry_base_seconds: float = Field(default=0.75, ge=0, le=5)
+    agnes_max_output_tokens: int = Field(default=1024, ge=64, le=2048)
+    agnes_max_evidence_moments: int = Field(default=1, ge=0, le=5)
+    agnes_max_image_edge: int = Field(default=2048, ge=128)
+
+    # Zo (export / sharing provider)
+    zo_api_key: str = ""
+    zo_api_url: str = "https://api.zo.computer"
+    zo_export_visibility: str = "private"
+    zo_timeout_seconds: float = Field(default=60.0, gt=0)
+
+    # GMI Cloud serverless inference
+    gmi_api_key: str = ""
+    gmi_base_url: str = "https://api.gmi-serving.com/v1"
+    gmi_model: str = "openai/gpt-5.4-nano"
+    gmi_timeout_seconds: float = Field(default=30.0, gt=0)
+
+    # Optional GMI Cloud GPU Compute deployment
+    gmi_enabled: bool = False
+    gmi_region: str = ""
+    gmi_instance_label: str = ""
+    gmi_gpu_label: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
     )
@@ -85,6 +122,10 @@ class Settings(BaseSettings):
         if self.analysis_control_mode not in {"disabled", "shadow", "active"}:
             raise ValueError(
                 "ANALYSIS_CONTROL_MODE must be one of disabled, shadow, or active"
+            )
+        if self.zo_export_visibility not in {"private", "unlisted"}:
+            raise ValueError(
+                "ZO_EXPORT_VISIBILITY must be one of private or unlisted"
             )
         return self
 

@@ -5,7 +5,10 @@ from uuid import uuid4
 
 import pytest
 
-from app.schemas.coaching import CoachPhase, CoachingReport
+from app.core.config import Settings
+from app.integrations.models import IntegrationRun
+
+from app.schemas.coaching import CoachAgent, CoachPhase, CoachingReport
 from app.services.coaching.context import (
     CalibrationContext,
     CoachingContext,
@@ -427,9 +430,10 @@ async def test_orchestrator_run_coaching_no_provider():
     }
     session_id = uuid4()
 
-    # Patch create_provider to return NullProvider (no API key -> no LLM)
-    with patch("app.services.coaching.orchestrator.create_provider", return_value=NullProvider()):
-        report = await run_coaching(session_id, "single", result)
+    report = await run_coaching(
+        session_id, "single", result,
+        settings=Settings(openai_api_key="", llm_api_key=""),
+    )
 
     assert isinstance(report, CoachingReport)
     assert report.session_id == session_id
@@ -439,6 +443,41 @@ async def test_orchestrator_run_coaching_no_provider():
     for agent in report.agents:
         assert agent.source == "deterministic"
         assert agent.confidence is not None
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_appends_completed_gmi_audit(monkeypatch):
+    async def fake_audit(self, context, evidence, draft_agents, *, agent_id):
+        return CoachAgent(
+            agent_id=agent_id,
+            name="GMI Evidence Auditor",
+            available=True,
+            source="gmi",
+            summary="The draft is grounded in the aggregate measurements.",
+            confidence=0.8,
+        ), IntegrationRun(
+            provider="gmi",
+            product="serverless-inference-audit",
+            model="openai/gpt-5.4-nano",
+            status="completed",
+        )
+
+    monkeypatch.setattr(
+        "app.services.coaching.orchestrator.GmiInferenceClient.audit", fake_audit
+    )
+    report = await run_coaching(
+        uuid4(),
+        "single",
+        {"sampled_frames": [_mk_frame([_mk_track(1)])]},
+        settings=Settings(
+            openai_api_key="", llm_api_key="", gmi_api_key="gmi-test"
+        ),
+    )
+
+    assert report.agents[-1].source == "gmi"
+    assert report.llm_model_used == "openai/gpt-5.4-nano"
+    assert report.integrations[-1].status == "completed"
+    assert "GMI independently audited" in report.coordination_notes[-1]
 
 
 @pytest.mark.asyncio
@@ -457,8 +496,10 @@ async def test_orchestrator_run_coaching_comparison_mode():
     }
     session_id = uuid4()
 
-    with patch("app.services.coaching.orchestrator.create_provider", return_value=NullProvider()):
-        report = await run_coaching(session_id, "comparison", result, is_group=True)
+    report = await run_coaching(
+        session_id, "comparison", result, is_group=True,
+        settings=Settings(openai_api_key="", llm_api_key=""),
+    )
 
     assert report.mode == "comparison"
     assert report.practice_type == "group"

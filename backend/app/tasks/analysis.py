@@ -6,6 +6,7 @@ import json
 import shutil
 import tempfile
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, BinaryIO, Callable
 from uuid import UUID
@@ -40,6 +41,8 @@ from app.services.tracking import (
     UltralyticsByteTrackAdapter,
 )
 from app.services.video import OpenCVVideoDecoder
+from app.integrations.gmi.health import inspect_gmi_runtime
+from app.integrations.models import IntegrationRun
 from app.tasks.celery_app import celery_app
 
 
@@ -326,6 +329,44 @@ def _path_signature(path_value: str | None) -> dict[str, Any] | None:
     }
 
 
+def _extract_frame_count(result: dict[str, Any]) -> int:
+    """Extract total frames processed from a pipeline result payload.
+
+    For comparison results, aggregates frame counts from both the nested
+    reference and attempt sub-results instead of reporting zero.
+    """
+    # Comparison results nest reference/attempt — sum both sides.
+    if result.get("mode") == "comparison":
+        ref_frames = _extract_frame_count(
+            result.get("reference", result.get("reference_result", {}))
+        )
+        attempt_frames = _extract_frame_count(
+            result.get("attempt", result.get("attempt_result", {}))
+        )
+        return ref_frames + attempt_frames
+
+    # Check common keys exposed by the pipeline
+    for key in ("frames_processed", "total_frames", "frame_count"):
+        if key in result and isinstance(result[key], (int, float)):
+            return int(result[key])
+    # Fallback: count pose frames if available
+    poses = result.get("poses", result.get("detections"))
+    if isinstance(poses, list):
+        return len(poses)
+    return 0
+
+
+def _extract_sample_fps(settings: Settings, result: dict[str, Any]) -> float:
+    """Extract the effective sample FPS from settings or result metadata."""
+    # Prefer the profile FPS stored in the result
+    ac = result.get("analysis_control", {})
+    profile_fps = ac.get("profile", {}).get("target_fps")
+    if isinstance(profile_fps, (int, float)) and profile_fps > 0:
+        return float(profile_fps)
+    # Fall back to the configured sample FPS
+    return float(settings.sample_fps or 10.0)
+
+
 async def _persist_attempts(
     db: Any,
     *,
@@ -386,6 +427,10 @@ async def _process_job(
             session.status = "processing"
         await db.commit()
         logger.task("run_analysis", f"job {job_id} started — mode={job.mode}")
+
+        # ── GMI runtime provenance: track pipeline wall-clock time ──
+        pipeline_start = time.monotonic()
+        started_at = datetime.now(timezone.utc)
 
         storage_service = storage or get_storage(settings)
         factory = pipeline_factory or build_pipeline
@@ -546,6 +591,53 @@ async def _process_job(
             await _persist_attempts(
                 db, job_id=job_id, media_id=media.id, controlled=controlled
             )
+
+        # ── GMI runtime provenance ──────────────────────────────────────
+        pipeline_elapsed = time.monotonic() - pipeline_start
+        finished_at = datetime.now(timezone.utc)
+        total_frames = _extract_frame_count(result_metadata)
+        sample_fps = _extract_sample_fps(settings, result_metadata)
+        gmi_info = inspect_gmi_runtime(
+            settings,
+            frame_count=total_frames,
+            elapsed_seconds=pipeline_elapsed,
+            sample_fps=sample_fps,
+        )
+
+        # Map failure reason to truthful IntegrationRun status:
+        #  - not_configured  → only when GMI is intentionally disabled or
+        #                      the config is missing ("gmi_not_configured")
+        #  - failed          → hardware / runtime failures (CUDA, torch)
+        #  - completed       → no failure and a real GMI GPU ran correctly
+        _STATUS_BY_REASON: dict[str | None, str] = {
+            None: "completed",
+            "gmi_not_configured": "not_configured",
+        }
+        gmi_status = _STATUS_BY_REASON.get(
+            gmi_info.failure_reason, "failed"
+        )
+
+        gmi_run = IntegrationRun(
+            provider="gmi",
+            product="analysis-runtime",
+            status=gmi_status,  # type: ignore[arg-type]
+            started_at=started_at,
+            completed_at=finished_at,
+            latency_ms=max(0, int(pipeline_elapsed * 1000)),
+            fallback_reason=(
+                "local_analysis_completed" if gmi_status == "not_configured" else None
+            ),
+            message=(
+                gmi_info.failure_reason or ""
+            ),
+            metadata=gmi_info.model_dump(),
+        )
+        result_metadata.setdefault("integrations", []).append(
+            gmi_run.model_dump(mode="json")
+        )
+        result_metadata.setdefault("analysis_control", {})[
+            "gmi_pipeline_version"
+        ] = gmi_info.pipeline_version
 
         logger.phase(f"writing results for job {job_id}")
         existing_result = (
