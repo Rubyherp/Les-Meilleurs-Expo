@@ -45,6 +45,7 @@ async def test_missing_configuration_is_truthful():
 async def test_valid_structured_review_uses_derived_image_only():
     async def handler(request):
         payload = json.loads(request.content)
+        assert payload["chat_template_kwargs"] == {"enable_thinking": False}
         content = payload["messages"][1]["content"]
         assert any(item.get("image_url", {}).get("url", "").startswith("data:image/jpeg;base64,") for item in content)
         return httpx.Response(200, headers={"x-request-id": "req_1"}, json={
@@ -76,6 +77,40 @@ async def test_markdown_fenced_json_is_accepted():
     review = await client.review(moment(), [image()])
     await http.aclose()
     assert review is not None
+    assert client.last_run.status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_json_object_wrapped_in_model_text_is_accepted():
+    async def handler(request):
+        return httpx.Response(200, json={"choices": [{"message": {"content": """Review result:
+{"summary":"The frame is usable.","visible_differences":[],"limitations":["Timing is not visible."],"confidence":0.7}
+End of review."""}}]})
+    http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    client = AgnesClient(settings(), http)
+    review = await client.review(moment(), [image()])
+    await http.aclose()
+    assert review is not None
+    assert client.last_run.status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_compatible_agnes_field_names_are_normalized():
+    async def handler(request):
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps({
+            "visual_summary": "The full body is visible.",
+            "observations": [{"description": "The right arm is raised."}],
+            "caveats": "Timing cannot be assessed from a still.",
+            "confidence_score": "78%",
+        })}}]})
+    http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    client = AgnesClient(settings(), http)
+    review = await client.review(moment(), [image()])
+    await http.aclose()
+    assert review is not None
+    assert review.summary == "The full body is visible."
+    assert review.visible_differences == ["The right arm is raised."]
+    assert review.confidence == 0.78
     assert client.last_run.status == "completed"
 
 

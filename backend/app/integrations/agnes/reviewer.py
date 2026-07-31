@@ -65,10 +65,20 @@ async def review_evidence_with_agnes(
     elif completed:
         status, reason = "fallback", "partial_visual_review"
     else:
-        status, reason = "failed", "visual_review_unavailable"
+        status = "failed"
+        reason = next(
+            (run.fallback_reason for run in reversed(runs) if run.fallback_reason),
+            "visual_review_unavailable",
+        )
     return output, IntegrationRun(
         provider="agnes", product="visual-evidence", model=settings.agnes_model,
         status=status, started_at=started, completed_at=datetime.now(timezone.utc),
         fallback_reason=reason,
-        metadata={"selected_count": len(selected), "reviewed_count": completed},
+        metadata={
+            "selected_count": len(selected),
+            "reviewed_count": completed,
+            "failure_reasons": sorted({
+                run.fallback_reason for run in runs if run.fallback_reason
+            }),
+        },
     )

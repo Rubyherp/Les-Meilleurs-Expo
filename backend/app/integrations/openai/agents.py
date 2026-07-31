@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from agents import Agent, ModelSettings, RunConfig, Runner, gen_trace_id
+from openai.types.shared import Reasoning
 
 from app.core.config import Settings
 from app.integrations.models import EvidenceMoment, IntegrationRun
@@ -33,7 +34,9 @@ def _agent(name: str, instructions: str, tools: list, model: str) -> Agent:
     return Agent(
         name=name, instructions=instructions, tools=tools, model=model,
         output_type=SpecialistOutput,
-        model_settings=ModelSettings(temperature=0.2),
+        model_settings=ModelSettings(
+            reasoning=Reasoning(effort="none"), verbosity="low"
+        ),
     )
 
 
@@ -118,7 +121,13 @@ async def run_agentic_coaching(
                 return baseline
 
         agents = list(await asyncio.gather(*(run_one(item) for item in specifications)))
-        synthesis = Agent(name="Coach Synthesis Agent", instructions=SYNTHESIS, model=model, output_type=SynthesisOutput)
+        synthesis = Agent(
+            name="Coach Synthesis Agent", instructions=SYNTHESIS, model=model,
+            output_type=SynthesisOutput,
+            model_settings=ModelSettings(
+                reasoning=Reasoning(effort="none"), verbosity="low"
+            ),
+        )
         try:
             synth_result = await asyncio.wait_for(
                 Runner.run(synthesis, json.dumps([a.model_dump(mode="json") for a in agents]), run_config=run_config),

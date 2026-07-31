@@ -380,15 +380,38 @@ async def request_coaching(
         )
     result, job = row
 
+    mode = job.mode if job.mode else "single"
+    settings = get_settings()
+    payload = payload or CoachingRequest()
+    cache_key = {
+        "version": 1,
+        "mode": mode,
+        "is_group": payload.is_group,
+        "expected_dancer_count": payload.expected_dancer_count,
+        "openai_model": settings.openai_model if settings.openai_api_key else None,
+        "agnes_model": settings.agnes_model if settings.agnes_api_key else None,
+        "gmi_model": settings.gmi_model if settings.gmi_api_key else None,
+    }
     cached = result.result_metadata.get("coaching_report")
-    if cached:
+    retriable_products = {
+        "visual-evidence", "agents-coaching", "serverless-inference-audit",
+    }
+    cached_has_provider_failure = any(
+        run.get("product") in retriable_products
+        and run.get("status") in {"failed", "fallback"}
+        for run in (cached or {}).get("integrations", [])
+        if isinstance(run, dict)
+    )
+    if (
+        cached
+        and not cached_has_provider_failure
+        and result.result_metadata.get("coaching_cache_key") == cache_key
+    ):
         return CoachingResponse(
             session_id=session_id, report=CoachingReport(**cached), status="completed"
         )
-    
-    mode = job.mode if job.mode else "single"
-    settings = get_settings()
-    is_group = payload.is_group if payload else False
+
+    is_group = payload.is_group
     evidence = select_evidence(
         result.result_metadata, mode=mode, is_group=is_group,
         max_moments=settings.agnes_max_evidence_moments,
@@ -432,7 +455,7 @@ async def request_coaching(
         mode,
         result.result_metadata,
         is_group=is_group,
-        expected_dancer_count=payload.expected_dancer_count if payload else 1,
+        expected_dancer_count=payload.expected_dancer_count,
         settings=settings,
         evidence_moments=reviewed_evidence,
         extra_integrations=agnes_runs,
@@ -442,6 +465,7 @@ async def request_coaching(
     result.result_metadata = {
         **result.result_metadata,
         "coaching_report": report.model_dump(mode="json"),
+        "coaching_cache_key": cache_key,
     }
     await db.commit()
     

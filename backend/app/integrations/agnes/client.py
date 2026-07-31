@@ -14,6 +14,7 @@ import httpx
 from pydantic import ValidationError
 
 from app.core.config import Settings
+from app.core.logger import logger
 from app.integrations.agnes.models import AgnesStructuredReview
 from app.integrations.models import EvidenceMoment, IntegrationRun, VisualReview
 from app.services.evidence.models import PreparedEvidenceImage
@@ -56,7 +57,13 @@ def _decode_json(raw: str) -> dict:
         value = value[3:-3].strip()
         if value.lower().startswith("json"):
             value = value[4:].lstrip()
-    decoded = json.loads(value)
+    try:
+        decoded = json.loads(value)
+    except json.JSONDecodeError:
+        start = value.find("{")
+        if start < 0:
+            raise
+        decoded, _ = json.JSONDecoder().raw_decode(value[start:])
     if not isinstance(decoded, dict):
         raise TypeError("expected_object")
     return decoded
@@ -191,6 +198,7 @@ class AgnesClient:
                     "model": model,
                     "temperature": 0.1,
                     "max_tokens": self.settings.agnes_max_output_tokens,
+                    "chat_template_kwargs": {"enable_thinking": False},
                     "response_format": {"type": "json_object"},
                     "messages": [
                         {"role": "system", "content": _SYSTEM_PROMPT},
@@ -214,7 +222,14 @@ class AgnesClient:
             if not isinstance(raw, str):
                 raise TypeError("content_not_string")
             parsed = AgnesStructuredReview.model_validate(_decode_json(raw))
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as exc:
+            logger.task(
+                "agnes",
+                "invalid model JSON "
+                f"length={len(raw)} has_object={'{' in raw and '}' in raw} "
+                f"finish_reason={body.get('choices', [{}])[0].get('finish_reason')} "
+                f"error={exc.msg}@{exc.pos}",
+            )
             raise _AttemptError("invalid_model_json", retryable=True) from None
         except ValidationError:
             raise _AttemptError("invalid_review_schema", retryable=True) from None

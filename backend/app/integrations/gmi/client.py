@@ -25,8 +25,9 @@ measurements, deterministic evidence descriptions, and draft coaching text.
 Never claim that you watched the video. Do not identify anyone or infer health,
 injury, emotion, age, gender, ethnicity, or overall skill level. Treat missing
 or low-coverage measurements as limitations. Return one JSON object with
-summary, strengths, cautions, suggestions, and confidence. Keep every list to
-at most three short items and confidence between 0 and 1."""
+exactly these keys and types: summary (string), strengths (array of strings),
+cautions (array of strings), suggestions (array of strings), and confidence
+(number from 0 to 1). Keep every list to at most three short items."""
 
 
 def _decode_json(raw: str) -> dict:
@@ -35,7 +36,13 @@ def _decode_json(raw: str) -> dict:
         value = value[3:-3].strip()
         if value.lower().startswith("json"):
             value = value[4:].lstrip()
-    decoded = json.loads(value)
+    try:
+        decoded = json.loads(value)
+    except json.JSONDecodeError:
+        start = value.find("{")
+        if start < 0:
+            raise
+        decoded, _ = json.JSONDecoder().raw_decode(value[start:])
     if not isinstance(decoded, dict):
         raise TypeError("expected_object")
     return decoded

@@ -78,10 +78,10 @@ class Settings(BaseSettings):
     agnes_base_url: str = ""
     agnes_model: str = "agnes-2.5-flash"
     agnes_fallback_model: str = "agnes-2.0-flash"
-    agnes_timeout_seconds: float = Field(default=15.0, gt=0)
+    agnes_timeout_seconds: float = Field(default=30.0, gt=0)
     agnes_max_retries: int = Field(default=1, ge=0, le=2)
     agnes_retry_base_seconds: float = Field(default=0.75, ge=0, le=5)
-    agnes_max_output_tokens: int = Field(default=400, ge=64, le=1024)
+    agnes_max_output_tokens: int = Field(default=1024, ge=64, le=2048)
     agnes_max_evidence_moments: int = Field(default=1, ge=0, le=5)
     agnes_max_image_edge: int = Field(default=2048, ge=128)
 

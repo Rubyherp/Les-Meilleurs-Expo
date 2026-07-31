@@ -69,6 +69,34 @@ async def test_gmi_inference_returns_grounded_auditor():
 
 
 @pytest.mark.asyncio
+async def test_gmi_normalizes_compatible_audit_schema():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "id": "chatcmpl-gmi-compatible",
+            "model": "openai/gpt-5.4-nano",
+            "choices": [{"message": {"content": """Audit result:\n{
+                \"overall_assessment\": \"The draft follows the supplied metrics.\",
+                \"key_strengths\": [{\"text\": \"Coverage is quantified.\"}],
+                \"limitations\": \"No direct visual review was supplied.\",
+                \"recommendations\": [\"Keep framing consistent.\"],
+                \"confidence_score\": \"82%\"
+            }"""}}],
+        })
+
+    http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    agent, run = await GmiInferenceClient(
+        Settings(gmi_api_key="gmi-test"), http
+    ).audit(CoachingContext(), [], [draft_agent()], agent_id=2)
+    await http.aclose()
+
+    assert agent is not None
+    assert agent.summary == "The draft follows the supplied metrics."
+    assert agent.confidence == 0.82
+    assert agent.strengths == ["Coverage is quantified."]
+    assert run.status == "completed"
+
+
+@pytest.mark.asyncio
 async def test_gmi_failure_is_sanitized_and_fallback_safe():
     async def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(503, text="provider-secret-body")

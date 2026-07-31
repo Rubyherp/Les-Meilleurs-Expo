@@ -3,7 +3,8 @@ import { CoachResponseJson, normalizeCoachResponse } from "@/models/CoachReport"
 import type { CoachResponse } from "@/models/CoachReport";
 
 const API_PREFIX = "/api/v1";
-const TIMEOUT_MS = 20_000;
+// Coaching can include Agnes review, OpenAI specialists + synthesis, and GMI audit.
+const TIMEOUT_MS = 180_000;
 
 function getApiBaseUrl(): string {
   const configured = process.env?.EXPO_PUBLIC_API_URL?.trim();
@@ -38,7 +39,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     return body as T;
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {
-      throw new Error("Coach server timed out.");
+      throw new Error("Coaching is still taking longer than expected. Try again to retrieve the completed report.");
     }
     throw err instanceof Error ? err : new Error("Coach server unreachable.");
   } finally {

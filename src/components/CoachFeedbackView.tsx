@@ -34,7 +34,7 @@ export default function CoachFeedbackView({ coachResponse, loading, error, onTri
       <View className="gap-[22px]">
         <View className="flex-row items-center gap-2 px-1">
           <ActivityIndicator size="small" color="#FF5C5C" />
-          <Text className="text-sm text-lesMuted">Generating coaching insights...</Text>
+          <Text className="text-sm text-lesMuted">Generating and auditing coaching insights…</Text>
         </View>
         <SkeletonCard />
         <SkeletonCard />
