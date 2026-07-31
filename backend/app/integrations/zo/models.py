@@ -69,6 +69,7 @@ class ZoExportResponse(BaseModel):
     session_id: UUID
     status: ZoExportStatus
     export_id: str | None = None
+    file_path: str | None = None
     url: str | None = None
     idempotency_key: str = ""
     created_at: datetime | None = None

@@ -9,6 +9,7 @@ export interface ZoExportResponse {
   session_id: string;
   status: "pending" | "completed" | "failed" | "not_configured";
   export_id?: string | null;
+  file_path?: string | null;
   url?: string | null;
   message: string;
   reminder_id?: string | null;

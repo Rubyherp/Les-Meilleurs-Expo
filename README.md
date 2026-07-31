@@ -164,8 +164,14 @@ OpenAI uses typed specialist agents after a deterministic observation gate.
 Agnes reviews one selected derived JPEG evidence moment at a time, never a raw
 video. Retryable capacity failures get one bounded compatibility-model attempt.
 Zo export is an explicit private/unlisted action; reminder creation is separate
-and opt-in. Missing or failed providers leave deterministic coaching usable and
-appear as `not_configured`, `fallback`, or `failed` in report provenance.
+and opt-in. Each report is written to
+`/home/workspace/les-meilleurs/practice-reports/<session>-<export>.json` in the
+user's Zo workspace, then read back and SHA-256 verified before the app says it
+was saved. Open Zo's Files view and navigate from `home` → `workspace` →
+`les-meilleurs` → `practice-reports`; the app also displays the exact selectable
+path after a successful export. Missing or failed providers leave deterministic
+coaching usable and appear as `not_configured`, `fallback`, or `failed` in
+report provenance.
 
 GMI Cloud serverless inference independently audits draft coaching against only
 aggregate measurements and deterministic evidence text. Its model, latency,

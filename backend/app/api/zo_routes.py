@@ -98,7 +98,11 @@ async def create_zo_export(
     )
 
     # Idempotency check against existing export
-    if existing and existing.get("idempotency_key") == artifact.idempotency_key:
+    if (
+        existing
+        and existing.get("status") == "completed"
+        and existing.get("idempotency_key") == artifact.idempotency_key
+    ):
         logger.task("zo", f"idempotent hit for session {session_id}")
         return ZoExportResponse(
             session_id=session_id,
@@ -111,8 +115,9 @@ async def create_zo_export(
                 else None
             ),
             message=existing.get("message", ""),
-        url=existing.get("url"),
-        reminder_id=existing.get("reminder_id"),
+            file_path=existing.get("file_path"),
+            url=existing.get("url"),
+            reminder_id=existing.get("reminder_id"),
         )
 
     # Attempt export via client boundary
@@ -132,6 +137,7 @@ async def create_zo_export(
         "artifact_version": artifact.artifact_version,
         "visibility": artifact.visibility,
         "message": response.message,
+        "file_path": response.file_path,
         "url": response.url,
         "reminder_id": response.reminder_id,
     }
@@ -182,6 +188,7 @@ async def get_zo_export(
             else None
         ),
         message=export_data.get("message", ""),
+        file_path=export_data.get("file_path"),
         url=export_data.get("url"),
         reminder_id=export_data.get("reminder_id"),
     )
