@@ -47,25 +47,27 @@ The **orchestrator** (`run_coaching`) coordinates the agents as a gated pipeline
 3. **Remaining agents run in parallel** — if Observation passes, Timing (and
    Formation for groups) execute concurrently.
 
-#### Deterministic-first, LLM-enhanced
+#### Deterministic-first, agent-enhanced
 
-Coaching works **without any API key**. The deterministic path uses pure
+Coaching works **without any API key**. Leave `OPENAI_API_KEY` and
+`LLM_API_KEY` empty to use the deterministic path, which relies on pure
 functions that inspect the analysis metrics directly — no model calls, no
 hallucinations, always reproducible.
 
-Optionally set an LLM API key in `backend/.env` to enhance reports. When
-configured, each specialist becomes an independent LLM call:
+Optionally set `OPENAI_API_KEY` (or the legacy `LLM_API_KEY`) in
+`backend/.env` to enhance reports. When configured, the OpenAI integration
+runs typed specialist agents through the Agents SDK:
 
-1. The orchestrator sends each agent a compact system prompt + structured
-   context string (the same metrics the deterministic path uses).
-2. Each agent responds with a JSON object: summary, strengths, issues,
+1. Each specialist uses focused tools to inspect the same structured metrics
+   and derived evidence available to the deterministic path.
+2. Each agent returns a typed result with a summary, strengths, issues,
    suggestions, and confidence.
 3. If an LLM call fails, times out, or returns invalid JSON, the agent
    **falls back to its deterministic counterpart** transparently. Users never
    see a broken report.
-4. The orchestrator merges all agent outputs into a single `CoachingReport`
-   with per-agent scores, evidence, coordination notes, and an overall
-   summary.
+4. A synthesis agent combines the specialist results into the overall summary,
+   while the orchestrator preserves per-agent scores, evidence, coordination
+   notes, provenance, and fallback status in the `CoachingReport`.
 
 This architecture means the coaching team degrades gracefully: LLMs improve
 language quality and depth, but the system is fully functional without them.
@@ -77,7 +79,7 @@ language quality and depth, but the system is fully functional without them.
   overlays, and coaching reports.
 - **Groups** — coming soon: share takes with your crew (analysis stays private
   until you choose to share).
-- **Profile** — your stats and streak.
+- **Profile** — privacy guidance and camera/photo-library permission details.
 
 ## Two analysis modes
 
@@ -114,7 +116,8 @@ When `EXPO_PUBLIC_API_URL` is unset, the app runs with local mock analysis.
 
 ## Quick start (backend)
 
-Requirements: Python 3.12, Docker, Apple Silicon Mac.
+Requirements: Python 3.12, Docker, and Docker Compose. Apple Silicon is a
+supported development environment; see the ARM64 compatibility notes below.
 
 ```sh
 cd backend
@@ -126,6 +129,18 @@ The API is at `http://localhost:8000`. Interactive docs at `/docs`.
 
 Services: API (`:8000`), Celery worker, Postgres (`:5432`), Redis (`:6379`),
 MinIO/S3 (`:9000`, console `:9001`).
+
+### Backend tests
+
+From `backend/`, install the test dependencies and run pytest:
+
+```sh
+pip install -e '.[test]'
+pytest
+```
+
+The Expo package currently provides start commands for mobile and web, but no
+separate JavaScript test script.
 
 ### Model assets
 
@@ -200,7 +215,7 @@ Record/Upload → YOLO Person Detection → ByteTrack Multi-Dancer Tracking
 │   └── theme/        Shared colors and tokens
 ├── backend/          Python/FastAPI video analysis server
 │   ├── app/          API, services, models, tasks
-│   └── tests/        pytest test suite (38 tests)
+│   └── tests/        pytest test suite
 ├── app.json          Expo configuration
 └── package.json      Mobile dependencies
 ```
